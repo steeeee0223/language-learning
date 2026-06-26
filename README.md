@@ -14,15 +14,22 @@ Local-first Next.js + Fumadocs app for turning short YouTube videos into structu
 
 ## Environment
 
-Create `.env.local` when you need transcript fetching or Notion export:
+Create `.env.local` from the committed template:
+
+```bash
+cp .env.example .env.local
+```
+
+Then fill in the values you need:
 
 ```bash
 YOUTUBE_TRANSCRIPT_API_KEY=...
 NOTION_API_KEY=...
 NOTION_PARENT_PAGE_ID=...
+LOCAL_DATA_ROOT=
 ```
 
-`NOTION_API_KEY` and `NOTION_PARENT_PAGE_ID` are optional unless you use Notion export.
+`YOUTUBE_TRANSCRIPT_API_KEY` is required for transcript fetching. `NOTION_API_KEY` and `NOTION_PARENT_PAGE_ID` are optional unless you use Notion export. `LOCAL_DATA_ROOT` is optional and defaults to the project root.
 
 ## Local Files
 
