@@ -1,8 +1,9 @@
 'use client';
 
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Download, ExternalLink, FileText, Loader2, RefreshCw } from 'lucide-react';
+import { ChevronDown, Download, ExternalLink, FileText, Loader2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
 
 import { MarkdownRenderer } from './markdown-renderer';
 
@@ -44,6 +45,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 }
 
 export function LessonsClient({ slug }: { slug?: string }) {
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const lessonsQuery = useQuery({
     queryKey: ['lessons'],
     queryFn: () => getJson<{ lessons: LessonListItem[] }>('/api/lessons'),
@@ -125,31 +127,59 @@ export function LessonsClient({ slug }: { slug?: string }) {
                 <p className="text-sm font-medium text-zinc-500">{selectedLesson.filename}</p>
                 <h2 className="mt-1 text-2xl font-semibold text-zinc-950">{selectedLesson.title}</h2>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="relative print:hidden">
                 <button
-                  className="inline-flex h-10 items-center gap-2 rounded-md border border-zinc-200 px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+                  className="inline-flex h-10 items-center gap-2 rounded-md bg-zinc-950 px-3 text-sm font-medium text-white"
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => setExportMenuOpen((open) => !open)}
+                  aria-expanded={exportMenuOpen}
+                  aria-haspopup="menu"
                 >
                   <Download className="size-4" aria-hidden />
-                  Save as PDF
+                  Export
+                  <ChevronDown className="size-4" aria-hidden />
                 </button>
-                <button
-                  className="inline-flex h-10 items-center gap-2 rounded-md bg-zinc-950 px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  type="button"
-                  onClick={() => notionMutation.mutate()}
-                  disabled={notionMutation.isPending}
-                >
-                  {notionMutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ExternalLink className="size-4" aria-hidden />}
-                  Import to Notion
-                </button>
-                <button
-                  className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-md border border-zinc-200 px-3 text-sm font-medium text-zinc-400"
-                  type="button"
-                  disabled
-                >
-                  Google Drive
-                </button>
+                {exportMenuOpen && (
+                  <div
+                    className="absolute right-0 z-20 mt-2 w-56 rounded-md border border-zinc-200 bg-white p-1 shadow-lg"
+                    role="menu"
+                    aria-label="Export lesson"
+                  >
+                    <button
+                      className="flex h-10 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-zinc-800 hover:bg-zinc-50"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setExportMenuOpen(false);
+                        window.print();
+                      }}
+                    >
+                      <Download className="size-4" aria-hidden />
+                      Save as PDF
+                    </button>
+                    <button
+                      className="flex h-10 w-full items-center gap-2 rounded-sm px-3 text-left text-sm text-zinc-800 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setExportMenuOpen(false);
+                        notionMutation.mutate();
+                      }}
+                      disabled={notionMutation.isPending}
+                    >
+                      {notionMutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ExternalLink className="size-4" aria-hidden />}
+                      Import to Notion
+                    </button>
+                    <button
+                      className="flex h-10 w-full cursor-not-allowed items-center gap-2 rounded-sm px-3 text-left text-sm text-zinc-400"
+                      type="button"
+                      role="menuitem"
+                      disabled
+                    >
+                      Google Drive
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             {notionMutation.error && <p className="mb-5 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">{notionMutation.error.message}</p>}
