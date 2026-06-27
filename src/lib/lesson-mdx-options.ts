@@ -82,7 +82,7 @@ function validateJsxElement(node: MdxNode) {
   reject(`<${node.name}> is not in the generated MDX allowlist`);
 }
 
-export function validateGeneratedMdx() {
+function validateGeneratedMdx() {
   return (tree: SyntaxTree) => {
     visit(tree, (rawNode) => {
       const node = rawNode as MdxNode;

@@ -8,33 +8,28 @@ export function createLessonsPageTree(lessons: LessonListItem[]): Root {
     name: 'Language Learning',
     children: [
       {
-        type: 'folder',
+        type: 'separator',
         name: 'Get Started',
-        root: true,
-        defaultOpen: true,
-        index: {
-          type: 'page',
-          name: 'Get Started',
-          url: '/get-started',
-        },
-        children: [],
       },
       {
-        type: 'folder',
-        name: 'Generated Lessons',
-        root: true,
-        defaultOpen: true,
-        index: {
-          type: 'page',
-          name: 'All Lessons',
-          url: '/lessons',
-        },
-        children: lessons.map((lesson) => ({
-          type: 'page' as const,
-          name: lesson.title,
-          url: `/lessons/${lesson.slug}`,
-        })),
+        type: 'page',
+        name: 'Get Started',
+        url: '/get-started',
       },
+      {
+        type: 'separator',
+        name: 'Generated Lessons',
+      },
+      {
+        type: 'page',
+        name: 'All Lessons',
+        url: '/lessons',
+      },
+      ...lessons.map((lesson) => ({
+        type: 'page' as const,
+        name: lesson.title,
+        url: `/lessons/${lesson.slug}`,
+      })),
     ],
   };
 }

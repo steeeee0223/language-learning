@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { GET as getLessons } from '../src/app/api/lessons/route.ts';
-import { GET as getLesson } from '../src/app/api/lessons/[slug]/route.ts';
-import { POST as postTask } from '../src/app/api/tasks/route.ts';
+import { GET as getLessons } from '@/app/api/lessons/route.ts';
+import { GET as getLesson } from '@/app/api/lessons/[slug]/route.ts';
+import { POST as postTask } from '@/app/api/tasks/route.ts';
 
 test('POST /api/tasks writes a task file and returns local paths', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-task-'));

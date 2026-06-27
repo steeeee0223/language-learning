@@ -1,4 +1,4 @@
-export type YouTubeEmbedProps = {
+type YouTubeEmbedProps = {
   videoId: string;
   title: string;
 };

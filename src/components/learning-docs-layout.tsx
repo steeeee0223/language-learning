@@ -11,22 +11,8 @@ type LearningDocsLayoutProps = {
 };
 
 export function LearningDocsLayout({ children, lessons }: LearningDocsLayoutProps) {
-  const tree = createLessonsPageTree(lessons);
-
   return (
-    <DocsLayout
-      {...baseOptions()}
-      tree={tree}
-      tabs={[
-        { title: 'Get Started', url: '/get-started' },
-        {
-          title: 'Generated Lessons',
-          url: '/lessons',
-          urls: new Set(['/lessons', ...lessons.map((lesson) => `/lessons/${lesson.slug}`)]),
-        },
-      ]}
-      tabMode="auto"
-    >
+    <DocsLayout {...baseOptions()} tree={createLessonsPageTree(lessons)} tabs={false}>
       {children}
     </DocsLayout>
   );

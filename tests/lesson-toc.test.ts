@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getMDXComponents } from '../src/components/mdx.tsx';
-import { YouTubeEmbed } from '../src/components/youtube-embed.tsx';
-import { createLessonMdxOptions } from '../src/lib/lesson-mdx-options.ts';
-import { extractLessonToc } from '../src/lib/lesson-toc.ts';
+import { getMDXComponents } from '@/components/mdx.tsx';
+import { YouTubeEmbed } from '@/components/youtube-embed.tsx';
+import { createLessonMdxOptions } from '@/lib/lesson-mdx-options.ts';
+import { extractLessonToc } from '@/lib/lesson-toc.ts';
 import { compileMDX } from 'next-mdx-remote/rsc';
 import { renderToStaticMarkup } from 'react-dom/server';
 

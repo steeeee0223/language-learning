@@ -19,6 +19,7 @@ function escapeMdxAttribute(value: string) {
 function buildMdxRequirements(video: TaskFileInput['video']) {
   return [
     `Start the lesson body with <YouTubeEmbed videoId="${escapeMdxAttribute(video.id)}" title="${escapeMdxAttribute(video.title)}" />.`,
+    'Immediately after the embed, add exactly one level-one heading containing the video title translated into learningSettings.targetLanguage.',
     'Use MDX-compatible syntax.',
     'Use GitHub Flavored Markdown tables only when the renderer supports them; otherwise use simple MDX table markup.',
     'All visible headings, table labels, explanations, vocabulary notes, grammar notes, and metadata labels must be written in learningSettings.targetLanguage.',
@@ -31,13 +32,13 @@ type BuildTaskFileInput = TaskFileInput & {
   now?: Date;
 };
 
-export type BuildTaskFileResult = {
+type BuildTaskFileResult = {
   taskPath: string;
   outputPath: string;
   suggestedCommand: string;
 };
 
-export function slugifyTitle(title: string, fallback: string) {
+function slugifyTitle(title: string, fallback: string) {
   const slug = title
     .normalize('NFKD')
     .toLowerCase()

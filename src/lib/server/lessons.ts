@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open, readdir, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { open, readFile, readdir, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { ensureLocalDirs } from './local-paths.ts';
@@ -15,9 +15,10 @@ export type LessonListItem = {
   filename: string;
   path: string;
   modifiedAt: string | null;
+  generatedAt: string;
 };
 
-export type LessonDetail = LessonListItem & {
+type LessonDetail = LessonListItem & {
   content: string;
 };
 
@@ -35,6 +36,50 @@ function titleFromSlug(slug: string) {
     .filter(Boolean)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
+}
+
+function lessonDateFromSlug(slug: string) {
+  return slug.match(/^(\d{4}-\d{2}-\d{2})(?:-|$)/)?.[1] ?? null;
+}
+
+function extractLessonHeading(content: string) {
+  return content.match(/^#\s+(.+?)\s*$/m)?.[1]?.trim() ?? null;
+}
+
+export function removeLessonHeading(content: string) {
+  return content.replace(/^#\s+.+?\s*(?:\r?\n|$)/m, '');
+}
+
+function lessonTitle(slug: string, content: string) {
+  const heading = extractLessonHeading(content);
+  const date = lessonDateFromSlug(slug);
+
+  if (heading && date) {
+    return `${date} ${heading}`;
+  }
+
+  return heading ?? titleFromSlug(slug);
+}
+
+async function readGeneratedAt(tasksDir: string, slug: string, fallback: string) {
+  try {
+    const task = JSON.parse(await readFile(join(tasksDir, `${slug}.json`), 'utf8')) as unknown;
+    if (
+      task &&
+      typeof task === 'object' &&
+      'createdAt' in task &&
+      typeof task.createdAt === 'string' &&
+      !Number.isNaN(Date.parse(task.createdAt))
+    ) {
+      return task.createdAt;
+    }
+  } catch (error) {
+    if (!isNotFoundError(error) && !(error instanceof SyntaxError)) {
+      throw error;
+    }
+  }
+
+  return fallback;
 }
 
 function assertValidLessonSlug(slug: string) {
@@ -96,14 +141,16 @@ export async function listLessons(options: LessonOptions = {}): Promise<LessonLi
   const lessons = await Promise.all(
     [...entriesBySlug.entries()].map(async ([slug, entry]) => {
       const absolutePath = join(paths.lessonsDir, entry.name);
-      const meta = await stat(absolutePath);
+      const [meta, content] = await Promise.all([stat(absolutePath), readFile(absolutePath, 'utf8')]);
+      const modifiedAt = meta.mtime.toISOString();
 
       return {
         slug,
-        title: titleFromSlug(slug),
+        title: lessonTitle(slug, content),
         filename: entry.name,
         path: `.local/lessons/${entry.name}`,
-        modifiedAt: meta.mtime.toISOString(),
+        modifiedAt,
+        generatedAt: await readGeneratedAt(paths.tasksDir, slug, modifiedAt),
       };
     }),
   );
@@ -135,13 +182,15 @@ export async function readLesson(options: ReadLessonOptions): Promise<LessonDeta
       }
 
       const content = await candidateFile.readFile('utf8');
+      const modifiedAt = meta.mtime.toISOString();
 
       return {
         slug: options.slug,
-        title: titleFromSlug(options.slug),
+        title: lessonTitle(options.slug, content),
         filename,
         path: `.local/lessons/${filename}`,
-        modifiedAt: meta.mtime.toISOString(),
+        modifiedAt,
+        generatedAt: await readGeneratedAt(paths.tasksDir, options.slug, modifiedAt),
         content,
       };
     } catch (error) {

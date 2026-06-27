@@ -4,10 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { parseYouTubeVideoId } from '../src/lib/youtube.ts';
-import { buildTaskFile } from '../src/lib/server/tasks.ts';
-import { listLessons, readLesson } from '../src/lib/server/lessons.ts';
-import { fetchTranscriptBundle } from '../src/lib/server/transcripts.ts';
+import { parseYouTubeVideoId } from '@/lib/youtube.ts';
+import { buildTaskFile } from '@/lib/server/tasks.ts';
+import { listLessons, readLesson } from '@/lib/server/lessons.ts';
+import { fetchTranscriptBundle } from '@/lib/server/transcripts.ts';
 
 test('parseYouTubeVideoId accepts common YouTube URL shapes', () => {
   assert.equal(parseYouTubeVideoId('https://www.youtube.com/watch?v=jNQXAC9IVRw'), 'jNQXAC9IVRw');
@@ -76,7 +76,7 @@ test('lesson helpers support MDX precedence, legacy markdown, and path traversal
   const lessons = await listLessons({ rootDir });
   assert.equal(lessons.length, 3);
   const salutListItem = lessons.find((lesson) => lesson.slug === '2026-06-27-salut');
-  assert.equal(salutListItem?.title, '2026 06 27 Salut');
+  assert.equal(salutListItem?.title, '2026-06-27 Salut');
   assert.equal(salutListItem?.filename, '2026-06-27-salut.mdx');
   assert.equal(salutListItem?.path, '.local/lessons/2026-06-27-salut.mdx');
   assert.equal(lessons.find((lesson) => lesson.slug === 'legacy')?.filename, 'legacy.md');
