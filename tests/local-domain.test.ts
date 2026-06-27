@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -44,8 +44,8 @@ test('buildTaskFile writes the local task contract and returns paths plus comman
   });
 
   assert.equal(result.taskPath, '.local/tasks/2026-06-27-how-to-say-hello-bonjour.json');
-  assert.equal(result.outputPath, '.local/lessons/2026-06-27-how-to-say-hello-bonjour.md');
-  assert.match(result.suggestedCommand, /codex "Generate the lesson markdown from \.local\/tasks\/2026-06-27-how-to-say-hello-bonjour\.json"/);
+  assert.equal(result.outputPath, '.local/lessons/2026-06-27-how-to-say-hello-bonjour.mdx');
+  assert.match(result.suggestedCommand, /codex "Generate the lesson MDX from \.local\/tasks\/2026-06-27-how-to-say-hello-bonjour\.json"/);
 
   const task = JSON.parse(await readFile(join(rootDir, result.taskPath), 'utf8'));
   assert.equal(task.schemaVersion, 1);
@@ -60,24 +60,89 @@ test('buildTaskFile writes the local task contract and returns paths plus comman
   ]);
 });
 
-test('lesson helpers list markdown files and prevent path traversal', async () => {
+test('lesson helpers support MDX precedence, legacy markdown, and path traversal protection', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-lessons-'));
   await writeFile(join(rootDir, 'outside.md'), '# Outside');
   await writeFile(join(rootDir, '.local-lessons-placeholder'), '');
 
   const lessonsDir = join(rootDir, '.local', 'lessons');
   await mkdir(lessonsDir, { recursive: true });
-  await writeFile(join(lessonsDir, '2026-06-27-salut.md'), '# Salut\n\nBonjour.');
+  await writeFile(join(lessonsDir, '2026-06-27-salut.mdx'), '# Salut\n\nBonjour.');
+  await writeFile(join(lessonsDir, 'legacy.md'), '# Legacy markdown');
+  await writeFile(join(lessonsDir, 'shared-slug.md'), '# Legacy duplicate');
+  await writeFile(join(lessonsDir, 'shared-slug.mdx'), '# Preferred MDX');
   await writeFile(join(lessonsDir, 'notes.txt'), 'ignored');
 
   const lessons = await listLessons({ rootDir });
-  assert.equal(lessons.length, 1);
-  assert.equal(lessons[0]?.slug, '2026-06-27-salut');
-  assert.equal(lessons[0]?.title, '2026 06 27 Salut');
+  assert.equal(lessons.length, 3);
+  const salutListItem = lessons.find((lesson) => lesson.slug === '2026-06-27-salut');
+  assert.equal(salutListItem?.title, '2026 06 27 Salut');
+  assert.equal(salutListItem?.filename, '2026-06-27-salut.mdx');
+  assert.equal(salutListItem?.path, '.local/lessons/2026-06-27-salut.mdx');
+  assert.equal(lessons.find((lesson) => lesson.slug === 'legacy')?.filename, 'legacy.md');
+  assert.equal(lessons.filter((lesson) => lesson.slug === 'shared-slug').length, 1);
+  assert.equal(lessons.find((lesson) => lesson.slug === 'shared-slug')?.filename, 'shared-slug.mdx');
 
   const lesson = await readLesson({ rootDir, slug: '2026-06-27-salut' });
   assert.equal(lesson.content, '# Salut\n\nBonjour.');
+  assert.equal(lesson.filename, '2026-06-27-salut.mdx');
+
+  const legacyLesson = await readLesson({ rootDir, slug: 'legacy' });
+  assert.equal(legacyLesson.content, '# Legacy markdown');
+  assert.equal(legacyLesson.filename, 'legacy.md');
+
+  const preferredLesson = await readLesson({ rootDir, slug: 'shared-slug' });
+  assert.equal(preferredLesson.content, '# Preferred MDX');
+  assert.equal(preferredLesson.filename, 'shared-slug.mdx');
   await assert.rejects(() => readLesson({ rootDir, slug: '../outside' }), /Invalid lesson slug/);
+});
+
+test('listLessons filters invalid slugs and deterministically sorts equal mtimes', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-lesson-list-'));
+  const lessonsDir = join(rootDir, '.local', 'lessons');
+  await mkdir(lessonsDir, { recursive: true });
+
+  const alphaPath = join(lessonsDir, 'alpha.mdx');
+  const zetaPath = join(lessonsDir, 'zeta.mdx');
+  await writeFile(zetaPath, '# Zeta');
+  await writeFile(alphaPath, '# Alpha');
+  await writeFile(join(lessonsDir, 'invalid.slug.mdx'), '# Invalid');
+  await writeFile(join(lessonsDir, '-invalid.md'), '# Invalid');
+
+  const sharedTimestamp = new Date('2026-06-27T10:00:00.000Z');
+  await utimes(alphaPath, sharedTimestamp, sharedTimestamp);
+  await utimes(zetaPath, sharedTimestamp, sharedTimestamp);
+
+  const lessons = await listLessons({ rootDir });
+  assert.deepEqual(
+    lessons.map((lesson) => lesson.filename),
+    ['alpha.mdx', 'zeta.mdx'],
+  );
+  assert.equal(lessons[0]?.modifiedAt, lessons[1]?.modifiedAt);
+});
+
+test('readLesson rejects an MDX symlink instead of reopening or falling back to markdown', async (context) => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-lesson-symlink-'));
+  const lessonsDir = join(rootDir, '.local', 'lessons');
+  const outsidePath = join(rootDir, 'outside.mdx');
+  await mkdir(lessonsDir, { recursive: true });
+  await writeFile(outsidePath, '# Outside');
+  await writeFile(join(lessonsDir, 'linked.md'), '# Legacy fallback');
+
+  try {
+    await symlink(outsidePath, join(lessonsDir, 'linked.mdx'), 'file');
+  } catch (error) {
+    const code = error instanceof Error && 'code' in error ? error.code : undefined;
+    if (code === 'EPERM' || code === 'EACCES' || code === 'ENOSYS') {
+      context.skip(`Symlinks are unavailable: ${code}`);
+      return;
+    }
+    throw error;
+  }
+
+  await assert.rejects(() => readLesson({ rootDir, slug: 'linked' }), (error: unknown) => {
+    return error instanceof Error && 'code' in error && error.code === 'ELOOP';
+  });
 });
 
 test('fetchTranscriptBundle fetches oEmbed metadata and normalizes transcript segments', async () => {

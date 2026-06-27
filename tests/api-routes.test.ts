@@ -36,22 +36,23 @@ test('POST /api/tasks writes a task file and returns local paths', async () => {
 
   assert.equal(response.status, 200);
   assert.match(payload.taskPath, /^\.local\/tasks\/\d{4}-\d{2}-\d{2}-me-at-the-zoo\.json$/);
-  assert.match(payload.outputPath, /^\.local\/lessons\/\d{4}-\d{2}-\d{2}-me-at-the-zoo\.md$/);
-  assert.match(payload.suggestedCommand, /^codex "Generate the lesson markdown from \.local\/tasks\//);
+  assert.match(payload.outputPath, /^\.local\/lessons\/\d{4}-\d{2}-\d{2}-me-at-the-zoo\.mdx$/);
+  assert.match(payload.suggestedCommand, /^codex "Generate the lesson MDX from \.local\/tasks\//);
 });
 
-test('GET /api/lessons lists markdown lessons and detail reads one lesson', async () => {
+test('GET /api/lessons lists MDX lessons and detail reads one lesson', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-lessons-'));
   process.env.LOCAL_DATA_ROOT = rootDir;
   const lessonsDir = join(rootDir, '.local', 'lessons');
   await mkdir(lessonsDir, { recursive: true });
-  await writeFile(join(lessonsDir, '2026-06-27-me-at-the-zoo.md'), '# Me at the zoo');
+  await writeFile(join(lessonsDir, '2026-06-27-me-at-the-zoo.mdx'), '# Me at the zoo');
 
   const listResponse = await getLessons();
   const listPayload = await listResponse.json();
   assert.equal(listResponse.status, 200);
   assert.equal(listPayload.lessons.length, 1);
   assert.equal(listPayload.lessons[0].slug, '2026-06-27-me-at-the-zoo');
+  assert.equal(listPayload.lessons[0].filename, '2026-06-27-me-at-the-zoo.mdx');
 
   const detailResponse = await getLesson(new Request('http://localhost/api/lessons/2026-06-27-me-at-the-zoo'), {
     params: Promise.resolve({ slug: '2026-06-27-me-at-the-zoo' }),

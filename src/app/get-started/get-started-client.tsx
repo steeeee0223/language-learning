@@ -98,7 +98,7 @@ export function GetStartedClient() {
       <div className="mb-8">
         <h1 className="text-3xl font-semibold text-zinc-950 md:text-4xl">Get Started</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-600">
-          Create a local task from a YouTube transcript, then run the suggested Codex command to produce the markdown lesson.
+          Create a local task from a YouTube transcript, then run the suggested Codex command to produce the MDX lesson.
         </p>
       </div>
 

@@ -12,6 +12,20 @@ const requiredSections = [
   'spoken usage',
 ];
 
+function escapeMdxAttribute(value: string) {
+  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function buildMdxRequirements(video: TaskFileInput['video']) {
+  return [
+    `Start the lesson body with <YouTubeEmbed videoId="${escapeMdxAttribute(video.id)}" title="${escapeMdxAttribute(video.title)}" />.`,
+    'Use MDX-compatible syntax.',
+    'Use GitHub Flavored Markdown tables only when the renderer supports them; otherwise use simple MDX table markup.',
+    'All visible headings, table labels, explanations, vocabulary notes, grammar notes, and metadata labels must be written in learningSettings.targetLanguage.',
+    'Source transcript quotes, proper nouns, URLs, video IDs, and code-like values may remain in their original language.',
+  ];
+}
+
 type BuildTaskFileInput = TaskFileInput & {
   rootDir?: string;
   now?: Date;
@@ -42,7 +56,7 @@ export async function buildTaskFile(input: BuildTaskFileInput): Promise<BuildTas
   const datePrefix = now.toISOString().slice(0, 10);
   const basename = `${datePrefix}-${slugifyTitle(input.video.title, input.video.id)}`;
   const taskPath = `.local/tasks/${basename}.json`;
-  const outputPath = `.local/lessons/${basename}.md`;
+  const outputPath = `.local/lessons/${basename}.mdx`;
   const task = {
     schemaVersion: 1,
     createdAt: now.toISOString(),
@@ -50,11 +64,12 @@ export async function buildTaskFile(input: BuildTaskFileInput): Promise<BuildTas
     transcript: input.transcript,
     learningSettings: input.learningSettings,
     output: {
-      format: 'markdown',
+      format: 'mdx',
       path: outputPath,
     },
     instructions: {
       requiredSections,
+      mdxRequirements: buildMdxRequirements(input.video),
     },
   };
 
@@ -63,6 +78,6 @@ export async function buildTaskFile(input: BuildTaskFileInput): Promise<BuildTas
   return {
     taskPath,
     outputPath,
-    suggestedCommand: `codex "Generate the lesson markdown from ${taskPath}"`,
+    suggestedCommand: `codex "Generate the lesson MDX from ${taskPath}"`,
   };
 }
