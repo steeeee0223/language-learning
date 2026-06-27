@@ -14,6 +14,7 @@
 
 # misc
 .DS_Store
+.pnpm-store
 *.pem
 /.pnp
 .pnp.js
@@ -25,3 +26,6 @@ yarn-error.log*
 .env*.local
 .vercel
 next-env.d.ts
+
+# ai
+docs/superpowers/

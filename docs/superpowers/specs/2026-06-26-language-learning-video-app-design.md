@@ -4,7 +4,7 @@
 
 Build a local-first web app for language learners who want to turn short YouTube videos, roughly five minutes long, into structured language-learning notes.
 
-The MVP accepts a YouTube URL, fetches the video's original transcript through `youtube-transcript.io`, lets the user choose learning settings, writes a local JSON task file for Codex CLI or another local agent, and displays generated markdown lessons from a gitignored local folder.
+The MVP accepts a YouTube URL, fetches the video's original transcript through `youtube-transcript.io`, lets the user choose learning settings, writes a local JSON task file for Codex CLI or another local agent, and displays generated MDX lessons from a gitignored local folder.
 
 The app UI is English. Generated learning content can target Chinese or English.
 
@@ -18,16 +18,31 @@ The app UI is English. Generated learning content can target Chinese or English.
   - Target translation language: Chinese or English.
   - CEFR levels: `A1`, `A2`, `B1`, `B2`, `C1`, `C2`, with multiple selections allowed.
 - Create a local JSON task file for Codex CLI or another local agent.
-- Store generated markdown lessons under a gitignored local folder.
-- Render local markdown lesson files in the app.
+- Store generated MDX lessons under a gitignored local folder.
+- Render local MDX lesson files in the app.
 - Show a sidebar of generated lesson files.
-- Export the currently rendered markdown lesson as PDF using browser print.
+- Export the currently rendered lesson as PDF using browser print.
 - Export a lesson to Notion when Notion environment variables are configured.
+
+## Immediate Follow-Up Tasks and Issues
+
+These items are the next implementation priorities after the initial Fumadocs scaffold:
+
+1. Use shadcn/base-ui primitive elements for app controls and composed UI primitives where they fit the interaction.
+2. Use the Fumadocs docs layout, matching the reference layout: left docs sidebar, central lesson content, and right "On this page" table of contents.
+3. Add sidebar tabs or grouped entries for:
+   - Get Started.
+   - Generated Lessons.
+4. Change generated lesson output from `.md` to `.mdx` unless a renderer-specific reason requires `.md`.
+5. [Issue] Markdown table syntax was not rendered as expected. The MDX rendering path must support GitHub Flavored Markdown tables or use MDX/table components that render reliably.
+6. Lessons should have a table of contents derived from headings. Prefer the Fumadocs docs layout "On this page" behavior.
+7. The lesson header should begin with an embedded YouTube video for the source video.
+8. [Issue] When the user chooses `"targetLanguage": "zh"`, all generated lesson content must be written in the target language. Source transcript quotes, proper nouns, URLs, IDs, and code-like values may remain in their original language.
 
 ## Non-Goals for MVP
 
 - Running Codex CLI or another local agent directly from the app.
-- Generating the final markdown lesson inside the web app.
+- Generating the final MDX lesson inside the web app.
 - Transcribing videos that do not already have available transcripts.
 - `faster-whisper` fallback.
 - Google Drive export.
@@ -54,9 +69,9 @@ Server-only local API routes handle:
 - Fetching transcripts from `youtube-transcript.io`.
 - Fetching video titles through YouTube oEmbed.
 - Writing task JSON files into `.local/tasks`.
-- Listing markdown files from `.local/lessons`.
-- Reading selected markdown lesson files.
-- Exporting selected markdown lessons to Notion.
+- Listing MDX lesson files from `.local/lessons`.
+- Reading selected MDX lesson files.
+- Exporting selected lessons to Notion.
 
 Secrets stay server-side:
 
@@ -70,7 +85,7 @@ Secrets stay server-side:
 
 The landing page is a simple English page with a primary "Get Started" call to action.
 
-It should explain the core workflow briefly: paste a YouTube link, choose learning goals, generate a local task, then review the produced markdown lesson.
+It should explain the core workflow briefly: paste a YouTube link, choose learning goals, generate a local task, then review the produced lesson.
 
 ### Get Started Page
 
@@ -104,31 +119,43 @@ Step 2: Learning settings form
 - Submitting the form creates a JSON task file in `.local/tasks`.
 - The UI displays:
   - Generated task path.
-  - Expected markdown output path.
+  - Expected MDX output path.
   - A suggested Codex CLI command.
 
 Suggested command shape:
 
 ```bash
-codex "Generate the lesson markdown from .local/tasks/2026-06-26-video-title.json"
+codex "Generate the lesson MDX from .local/tasks/2026-06-26-video-title.json"
 ```
 
 ### Lesson Sidebar
 
-The sidebar lists files from `.local/lessons/*.md`.
+Use the Fumadocs docs layout sidebar. The sidebar should include tabs or grouped entries for:
+
+- Get Started.
+- Generated Lessons.
+
+The generated lessons area lists files from `.local/lessons/*.mdx`, with backward-compatible support for `.md` files only if needed during migration.
 
 Each item should display:
 
 - Filename or derived title.
 - Last modified time when available.
 
-If no lessons exist, show an empty state explaining that generated markdown files will appear after the user runs the local agent command.
+If no lessons exist, show an empty state explaining that generated lesson files will appear after the user runs the local agent command.
 
-Include a refresh control so the user can refresh the lesson list after Codex CLI writes a new markdown file.
+Include a refresh control so the user can refresh the lesson list after Codex CLI writes a new lesson file.
 
 ### Lesson Detail Page
 
-The lesson detail page renders the selected markdown file.
+The lesson detail page renders the selected MDX file inside the Fumadocs docs layout.
+
+The lesson page should include:
+
+- A left sidebar with Get Started and Generated Lessons navigation.
+- A central lesson body.
+- A right "On this page" table of contents generated from lesson headings.
+- An embedded YouTube video at the top of the lesson header.
 
 It includes an export dropdown with:
 
@@ -166,22 +193,22 @@ POST /api/exports/notion
 
 - Input: normalized video metadata, transcript segments, and learning settings.
 - Writes a JSON task file to `.local/tasks`.
-- Returns task path, output markdown path, and suggested Codex CLI command.
+- Returns task path, output MDX path, and suggested Codex CLI command.
 
 `GET /api/lessons`
 
-- Lists `.local/lessons/*.md`.
+- Lists `.local/lessons/*.mdx`, with optional migration support for `.md`.
 - Returns stable slugs, display titles, paths, and modified times.
 
 `GET /api/lessons/[slug]`
 
-- Reads a selected markdown file from `.local/lessons`.
+- Reads a selected MDX lesson file from `.local/lessons`.
 - Prevents path traversal by resolving only known lesson slugs or validating the resolved path remains inside `.local/lessons`.
 
 `POST /api/exports/notion`
 
 - Input: selected lesson slug.
-- Reads the markdown file server-side.
+- Reads the lesson file server-side.
 - Creates a Notion page under `NOTION_PARENT_PAGE_ID` using `NOTION_API_KEY`.
 - Returns the Notion page URL or a typed configuration/API error.
 
@@ -216,7 +243,7 @@ Generated files live under `.local`, which must be gitignored:
   tasks/
     2026-06-26-video-title.json
   lessons/
-    2026-06-26-video-title.md
+    2026-06-26-video-title.mdx
 ```
 
 The app should create `.local/tasks` and `.local/lessons` if missing.
@@ -257,8 +284,8 @@ Shape:
     "cefrLevels": ["A2", "B1"]
   },
   "output": {
-    "format": "markdown",
-    "path": ".local/lessons/2026-06-26-video-title.md"
+    "format": "mdx",
+    "path": ".local/lessons/2026-06-26-video-title.mdx"
   },
   "instructions": {
     "requiredSections": [
@@ -274,13 +301,23 @@ Shape:
 
 The transcript preserves timestamp segments from the API. The app does not merge or re-sentence the transcript. Codex CLI handles sentence grouping and translation when generating the lesson.
 
-## Markdown Output Contract
+When `learningSettings.targetLanguage` is set, the generated lesson's instructional content, headings, table labels, explanations, vocabulary notes, grammar notes, and metadata labels must be written in that target language. For example, `"targetLanguage": "zh"` means the lesson output should be in Chinese except for source-language quotes, proper nouns, URLs, video IDs, and other code-like values.
 
-Codex CLI or another local agent writes the final markdown file to the task's `output.path`.
+## MDX Output Contract
 
-Required markdown sections:
+Codex CLI or another local agent writes the final MDX file to the task's `output.path`.
 
-```md
+The lesson header must begin with an embedded YouTube video for the source video. Prefer a shared MDX component, for example:
+
+```mdx
+<YouTubeEmbed videoId="abc123" title="Video Title" />
+```
+
+Required MDX sections. These names describe the canonical section concepts; visible headings and labels must be written in `learningSettings.targetLanguage`.
+
+```mdx
+<YouTubeEmbed videoId="abc123" title="Video Title" />
+
 # Video Title
 
 ## Metadata
@@ -298,16 +335,18 @@ Required markdown sections:
 ## Spoken Usage
 ```
 
-Vocabulary and grammar sections are grouped by selected CEFR level. If the user selects `A1`, `B1`, and `C1`, the markdown should include vocabulary and grammar sections for each selected level.
+Vocabulary and grammar sections are grouped by selected CEFR level. If the user selects `A1`, `B1`, and `C1`, the lesson should include vocabulary and grammar sections for each selected level.
 
 The spoken usage section lists conversational expressions, idioms, reductions, filler phrases, discourse markers, or casual turns of phrase from the transcript when present.
+
+Tables must render correctly in the lesson view. The renderer should support GitHub Flavored Markdown table syntax or provide an MDX table component for generated lessons.
 
 ## TanStack Query Usage
 
 Queries:
 
 - `lessonsQuery`: lists generated lessons.
-- `lessonQuery(slug)`: reads one markdown lesson.
+- `lessonQuery(slug)`: reads one lesson.
 
 Mutations:
 
@@ -315,7 +354,7 @@ Mutations:
 - `createTaskMutation`: writes the task JSON file.
 - `exportNotionMutation`: exports a selected lesson to Notion.
 
-After task creation, the lesson list should not refresh automatically because the markdown file does not exist until the local agent writes it.
+After task creation, the lesson list should not refresh automatically because the lesson file does not exist until the local agent writes it.
 
 After Notion export, no local lesson invalidation is required.
 
@@ -354,7 +393,7 @@ Missing Notion config:
 Notion API failure:
 
 - Show a concise error state.
-- Keep the local markdown file untouched.
+- Keep the local lesson file untouched.
 
 ## Exports
 
@@ -365,7 +404,7 @@ PDF export uses browser print:
 - User chooses "Save as PDF".
 - The app calls `window.print()`.
 - Print CSS hides navigation and controls.
-- Print CSS formats the markdown content for paper/PDF output.
+- Print CSS formats the lesson content for paper/PDF output.
 
 ### Notion
 
@@ -415,7 +454,7 @@ Future Drive export can use Better Auth for Google OAuth:
 - Configure Google provider.
 - Request `https://www.googleapis.com/auth/drive.file`.
 - Store or retrieve the access token safely.
-- Upload the selected markdown or generated PDF through the Drive API.
+- Upload the selected lesson file or generated PDF through the Drive API.
 
 This is excluded from MVP because the app does not otherwise need user accounts or OAuth.
 
@@ -442,6 +481,10 @@ API route tests:
 - Rate limit response mapping.
 - Task file creation.
 - Lesson list and lesson read behavior.
+- MDX rendering with GitHub Flavored Markdown tables.
+- Lesson table of contents generation from headings.
+- YouTube embed rendering at the top of a lesson.
+- Target-language generation instructions, including `"targetLanguage": "zh"` requiring Chinese headings, labels, and explanatory content.
 - Notion missing-config response.
 
 UI tests:
@@ -451,14 +494,14 @@ UI tests:
 - CEFR checkbox behavior.
 - Task creation result display.
 - Sidebar empty and populated states.
-- Lesson detail markdown rendering.
+- Lesson detail MDX rendering.
 - Export dropdown states.
 
 Manual verification:
 
 - Create a task from a real YouTube URL with available transcript.
 - Run the displayed Codex CLI command.
-- Confirm the generated markdown appears in the sidebar after refresh.
+- Confirm the generated lesson appears in the sidebar after refresh.
 - Open the generated lesson page.
 - Save as PDF through browser print.
 - Export to Notion when Notion env vars are configured.
@@ -476,7 +519,7 @@ Manual verification:
 - Local agent integration: task JSON plus displayed command.
 - Task file format: JSON.
 - Local storage folder: `.local`.
-- Markdown lesson grouping: vocabulary and grammar grouped by CEFR level.
+- MDX lesson grouping: vocabulary and grammar grouped by CEFR level.
 - PDF export: browser print.
 - Notion export: MVP with env vars.
 - Google Drive export: future enhancement with Better Auth.

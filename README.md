@@ -1,45 +1,56 @@
-# .
+# Language Learning Notes
 
-This is a Next.js application generated with
-[Create Fumadocs](https://github.com/fuma-nama/fumadocs).
+Local-first Next.js + Fumadocs app for turning short YouTube videos into structured language-learning lesson tasks.
 
-Run development server:
+## Workflow
+
+1. Open the app and choose **Get Started**.
+2. Paste a YouTube URL.
+3. Fetch the original transcript through `youtube-transcript.io`.
+4. Choose a target translation language and CEFR levels.
+5. Create a local JSON task in `.local/tasks`.
+6. Run the suggested Codex command to generate markdown into `.local/lessons`.
+7. Review lessons in the app, print to PDF, or export to Notion when configured.
+
+## Environment
+
+Create `.env.local` from the committed template:
 
 ```bash
-npm run dev
-# or
-pnpm dev
-# or
-yarn dev
+cp .env.example .env.local
 ```
 
-Open http://localhost:3000 with your browser to see the result.
+Then fill in the values you need:
 
-## Explore
+```bash
+YOUTUBE_TRANSCRIPT_API_KEY=...
+NOTION_API_KEY=...
+NOTION_PARENT_PAGE_ID=...
+LOCAL_DATA_ROOT=
+```
 
-In the project, you can see:
+`YOUTUBE_TRANSCRIPT_API_KEY` is required for transcript fetching. `NOTION_API_KEY` and `NOTION_PARENT_PAGE_ID` are optional unless you use Notion export. `LOCAL_DATA_ROOT` is optional and defaults to the project root.
 
-- `lib/source.ts`: Code for content source adapter, [`loader()`](https://fumadocs.dev/docs/headless/source-api) provides the interface to access your content.
-- `lib/layout.shared.tsx`: Shared options for layouts, optional but preferred to keep.
+## Local Files
 
-| Route                     | Description                                            |
-| ------------------------- | ------------------------------------------------------ |
-| `app/(home)`              | The route group for your landing page and other pages. |
-| `app/docs`                | The documentation layout and pages.                    |
-| `app/api/search/route.ts` | The Route Handler for search.                          |
+Generated local artifacts are intentionally gitignored:
 
-### Fumadocs MDX
+```txt
+.local/
+  tasks/
+  lessons/
+```
 
-A `source.config.ts` config file has been included, you can customise different options like frontmatter schema.
+For tests or isolated local runs, set `LOCAL_DATA_ROOT` to another directory.
 
-Read the [Introduction](https://fumadocs.dev/docs/mdx) for further details.
+## Development
 
-## Learn More
+```bash
+pnpm dev
+pnpm test
+pnpm lint
+pnpm types:check
+pnpm build
+```
 
-To learn more about Next.js and Fumadocs, take a look at the following
-resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js
-  features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [Fumadocs](https://fumadocs.dev) - learn about Fumadocs
+`pnpm build` uses `next build --webpack` because the current Fumadocs MDX setup builds reliably through webpack in this workspace.
