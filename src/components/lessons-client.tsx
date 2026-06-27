@@ -3,6 +3,8 @@
 import { useMutation } from '@tanstack/react-query';
 import { Download, ExternalLink, Loader2 } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: 'POST',
@@ -25,26 +27,28 @@ export function LessonActions({ slug }: { slug: string }) {
 
   return (
     <div className="mb-6 flex flex-wrap items-center gap-2 border-b pb-4 print:hidden">
-      <button
-        className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-fd-accent"
+      <Button
+        variant="outline"
+        size="lg"
         type="button"
         onClick={() => window.print()}
       >
-        <Download className="size-4" aria-hidden />
+        <Download data-icon="inline-start" aria-hidden />
         Save as PDF
-      </button>
-      <button
-        className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-fd-accent disabled:cursor-not-allowed disabled:opacity-60"
+      </Button>
+      <Button
+        variant="outline"
+        size="lg"
         type="button"
         onClick={() => notionMutation.mutate()}
         disabled={notionMutation.isPending}
       >
-        {notionMutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ExternalLink className="size-4" aria-hidden />}
+        {notionMutation.isPending ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : <ExternalLink data-icon="inline-start" aria-hidden />}
         Import to Notion
-      </button>
-      <button className="inline-flex h-9 cursor-not-allowed items-center rounded-md border px-3 text-sm opacity-60" type="button" disabled>
+      </Button>
+      <Button variant="outline" size="lg" type="button" disabled>
         Google Drive
-      </button>
+      </Button>
       {notionMutation.error ? <p className="basis-full text-sm text-fd-muted-foreground">{notionMutation.error.message}</p> : null}
       {notionMutation.data ? <p className="basis-full text-sm text-fd-muted-foreground">Notion page created: {notionMutation.data.url}</p> : null}
     </div>

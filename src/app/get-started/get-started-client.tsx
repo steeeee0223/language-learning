@@ -4,6 +4,11 @@ import { useMutation } from '@tanstack/react-query';
 import { CheckCircle2, ClipboardList, Loader2, Play, Wand2 } from 'lucide-react';
 import { FormEvent, useMemo, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cefrLevels, type CefrLevel, type LearningSettings, type NormalizedTranscript, type VideoMetadata } from '@/lib/contracts';
 import { parseYouTubeVideoId } from '@/lib/youtube';
 
@@ -102,25 +107,26 @@ export function GetStartedClient() {
             </div>
             <h2 className="text-lg font-semibold text-zinc-950">1. Fetch transcript</h2>
           </div>
-          <form className="mt-5 space-y-4" onSubmit={submitUrl}>
-            <label className="block text-sm font-medium text-zinc-800" htmlFor="youtube-url">
-              YouTube video URL
-            </label>
-            <input
-              id="youtube-url"
-              className="h-11 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none transition focus:border-zinc-950"
-              placeholder="https://www.youtube.com/watch?v=..."
-              value={youtubeUrl}
-              onChange={(event) => setYoutubeUrl(event.target.value)}
-            />
-            <button
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-zinc-950 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+          <form className="mt-5 flex flex-col gap-4" onSubmit={submitUrl}>
+            <Field>
+              <FieldLabel htmlFor="youtube-url">YouTube video URL</FieldLabel>
+              <Input
+                id="youtube-url"
+                className="h-10"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={youtubeUrl}
+                onChange={(event) => setYoutubeUrl(event.target.value)}
+              />
+            </Field>
+            <Button
+              className="w-fit"
+              size="lg"
               type="submit"
               disabled={transcriptMutation.isPending}
             >
-              {transcriptMutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Wand2 className="size-4" aria-hidden />}
+              {transcriptMutation.isPending ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : <Wand2 data-icon="inline-start" aria-hidden />}
               Fetch Transcript
-            </button>
+            </Button>
           </form>
 
           {(clientError || transcriptMutation.error) && (
@@ -160,50 +166,47 @@ export function GetStartedClient() {
             </div>
             <h2 className="text-lg font-semibold text-zinc-950">2. Learning settings</h2>
           </div>
-          <form className="mt-5 space-y-5" onSubmit={submitTask}>
-            <fieldset>
-              <legend className="text-sm font-medium text-zinc-800">Target translation language</legend>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+          <form className="mt-5 flex flex-col gap-5" onSubmit={submitTask}>
+            <FieldSet>
+              <FieldLegend variant="label">Target translation language</FieldLegend>
+              <RadioGroup
+                className="grid-cols-2"
+                value={targetLanguage}
+                onValueChange={(value) => setTargetLanguage(value as LearningSettings['targetLanguage'])}
+              >
                 {[
                   ['zh', 'Chinese'],
                   ['en', 'English'],
                 ].map(([value, label]) => (
-                  <label
-                    key={value}
-                    className="flex h-10 items-center gap-2 rounded-md border border-zinc-200 px-3 text-sm text-zinc-800"
-                  >
-                    <input
-                      type="radio"
-                      name="target-language"
-                      checked={targetLanguage === value}
-                      onChange={() => setTargetLanguage(value as LearningSettings['targetLanguage'])}
-                    />
-                    {label}
-                  </label>
+                  <Field key={value} orientation="horizontal" className="h-10 rounded-md border px-3">
+                    <RadioGroupItem id={`target-language-${value}`} value={value} />
+                    <FieldLabel htmlFor={`target-language-${value}`}>{label}</FieldLabel>
+                  </Field>
                 ))}
-              </div>
-            </fieldset>
+              </RadioGroup>
+            </FieldSet>
 
-            <fieldset>
-              <legend className="text-sm font-medium text-zinc-800">CEFR levels</legend>
-              <div className="mt-3 grid grid-cols-3 gap-2">
+            <FieldSet>
+              <FieldLegend variant="label">CEFR levels</FieldLegend>
+              <FieldGroup className="grid grid-cols-3 gap-2">
                 {cefrLevels.map((level) => (
-                  <label key={level} className="flex h-10 items-center gap-2 rounded-md border border-zinc-200 px-3 text-sm text-zinc-800">
-                    <input type="checkbox" checked={selectedLevels.includes(level)} onChange={() => toggleLevel(level)} />
-                    {level}
-                  </label>
+                  <Field key={level} orientation="horizontal" className="h-10 rounded-md border px-3">
+                    <Checkbox id={`cefr-${level}`} checked={selectedLevels.includes(level)} onCheckedChange={() => toggleLevel(level)} />
+                    <FieldLabel htmlFor={`cefr-${level}`}>{level}</FieldLabel>
+                  </Field>
                 ))}
-              </div>
-            </fieldset>
+              </FieldGroup>
+            </FieldSet>
 
-            <button
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+            <Button
+              className="w-fit"
+              size="lg"
               type="submit"
               disabled={!transcriptMutation.data || taskMutation.isPending}
             >
-              {taskMutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ClipboardList className="size-4" aria-hidden />}
+              {taskMutation.isPending ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : <ClipboardList data-icon="inline-start" aria-hidden />}
               Create Local Task
-            </button>
+            </Button>
           </form>
 
           {taskMutation.error && (
@@ -211,7 +214,7 @@ export function GetStartedClient() {
           )}
 
           {taskMutation.data && (
-            <div className="mt-5 space-y-3 rounded-md bg-zinc-950 p-4 text-sm text-white">
+            <div className="mt-5 flex flex-col gap-3 rounded-md bg-zinc-950 p-4 text-sm text-white">
               <p className="font-medium">Task created</p>
               <p className="font-mono text-zinc-300">{taskMutation.data.taskPath}</p>
               <p className="font-mono text-zinc-300">{taskMutation.data.outputPath}</p>
