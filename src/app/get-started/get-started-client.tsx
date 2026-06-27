@@ -94,15 +94,7 @@ export function GetStartedClient() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-5 py-8 md:py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold text-zinc-950 md:text-4xl">Get Started</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-600">
-          Create a local task from a YouTube transcript, then run the suggested Codex command to produce the MDX lesson.
-        </p>
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
+    <div className="not-prose grid gap-5">
         <section className="rounded-lg border border-zinc-200 bg-white p-5">
           <div className="flex items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-md bg-zinc-950 text-white">
@@ -227,7 +219,6 @@ export function GetStartedClient() {
             </div>
           )}
         </section>
-      </div>
-    </main>
+    </div>
   );
 }
