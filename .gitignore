@@ -29,3 +29,4 @@ next-env.d.ts
 
 # ai
 docs/superpowers/
+.worktrees/
