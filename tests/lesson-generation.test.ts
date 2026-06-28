@@ -230,12 +230,17 @@ describe('lesson persistence and generation coordination', () => {
     const validLesson = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
     let calls = 0;
     let release!: () => void;
+    let generationStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      generationStarted = resolve;
+    });
     const blocked = new Promise<void>((resolve) => {
       release = resolve;
     });
     const generator = {
       generate: async () => {
         calls += 1;
+        generationStarted();
         await blocked;
         return validLesson;
       },
@@ -244,6 +249,7 @@ describe('lesson persistence and generation coordination', () => {
       { slug: 'lesson', modelPreset: 'best', rootDir },
       { generator, getStatus: getReadyStatus },
     );
+    await started;
     await assert.rejects(
       () =>
         generateLesson(

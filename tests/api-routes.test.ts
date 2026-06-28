@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { describe, it } from 'node:test';
 
 import { GET as getLessons } from '@/app/api/lessons/route.ts';
 import { GET as getLesson } from '@/app/api/lessons/[slug]/route.ts';
@@ -61,4 +61,12 @@ test('GET /api/lessons lists MDX lessons and detail reads one lesson', async () 
   const detailPayload = await detailResponse.json();
   assert.equal(detailResponse.status, 200);
   assert.equal(detailPayload.lesson.content, '# Me at the zoo');
+});
+
+describe('Codex generation API', () => {
+  it.skip('GET /api/codex/status returns each Zod-defined readiness state');
+  it.skip('POST /api/tasks/[slug]/generate rejects invalid slugs and model presets');
+  it.skip('POST /api/tasks/[slug]/generate maps every GenerationError to its stable status and code');
+  it.skip('POST /api/tasks/[slug]/generate returns the validated lesson slug and path');
+  it.skip('POST /api/tasks/[slug]/generate never exposes raw SDK errors');
 });

@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { access } from 'node:fs/promises';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { CodexStatus } from '@/lib/generation-contracts';
 
 const execFileAsync = promisify(execFile);
-const projectRequire = createRequire(import.meta.url);
 const codexVersionPattern = /^codex-cli\s+\S+$/;
 const signedOutPattern = /not logged in|not authenticated/i;
 const unavailableRuntimePattern =
@@ -39,14 +39,7 @@ function isUnavailableCodexRuntime(error: unknown) {
 }
 
 function resolveCodexLauncher() {
-  try {
-    return projectRequire.resolve('@openai/codex/bin/codex.js');
-  } catch (error) {
-    if (!isModuleResolutionError(error)) throw error;
-
-    const sdkEntry = import.meta.resolve('@openai/codex-sdk');
-    return createRequire(sdkEntry).resolve('@openai/codex/bin/codex.js');
-  }
+  return join(process.cwd(), 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
 }
 
 function runCodex(launcherPath: string, args: string[]) {
@@ -62,6 +55,7 @@ export async function getCodexStatus(): Promise<CodexStatus> {
 
   try {
     launcherPath = resolveCodexLauncher();
+    await access(launcherPath);
     const result = await runCodex(launcherPath, ['--version']);
     version = result.stdout.trim();
     if (!codexVersionPattern.test(version)) {

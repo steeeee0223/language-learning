@@ -1,16 +1,43 @@
 # Language Learning Notes
 
-Local-first Next.js + Fumadocs app for turning short YouTube videos into structured language-learning lesson tasks.
+Local-first Next.js + Fumadocs app for turning short YouTube videos into structured language-learning lessons.
+
+## Prerequisites
+
+- Node.js 24.11.1 and pnpm 11.0.8
+- A ChatGPT/Codex account with available Codex usage
+- A `youtube-transcript.io` API key for transcript fetching
 
 ## Workflow
 
-1. Open the app and choose **Get Started**.
-2. Paste a YouTube URL.
-3. Fetch the original transcript through `youtube-transcript.io`.
-4. Choose a target translation language and CEFR levels.
-5. Create a local JSON task in `.local/tasks`.
-6. Run the suggested Codex command to generate markdown into `.local/lessons`.
-7. Review lessons in the app, print to PDF, or export to Notion when configured.
+1. Install dependencies:
+
+   ```bash
+   pnpm install
+   ```
+
+2. Sign in to Codex:
+
+   ```bash
+   pnpm exec codex login
+   ```
+
+   Choose the ChatGPT sign-in option (recommended). The bundled Codex CLI handles and refreshes its own credentials in the normal user-level credential store or cache; the application code does not open or copy credential files.
+
+3. Start the app:
+
+   ```bash
+   pnpm dev
+   ```
+
+4. Open **Get Started**, paste a YouTube URL, and fetch the transcript.
+5. Choose the target language and CEFR levels, then select **Prepare Lesson**.
+6. Choose **Auto**, **Fast**, or **Best quality**, then select **Generate Lesson**.
+7. Review the generated lesson in the app, print it to PDF, or export it to Notion when configured.
+
+With the recommended ChatGPT sign-in, each OS user uses their own Codex account and usage allowance, with no API key required. The project does not ship or configure a shared `OPENAI_API_KEY`, Vercel AI Gateway key, or other shared AI key. Generation uses whatever local Codex authentication belongs to the OS account running the app.
+
+For generation, the app explicitly invokes the repository's `.agents/skills/generating-lesson` skill so the output contract stays consistent. The Codex agent runs in a read-only sandbox; sandboxed network access and web search are disabled, though it may use read-only tools to inspect the repository and skill files. Codex still sends the prompt and transcript to OpenAI's Codex service under the local account. The app then validates the returned MDX and writes the lesson itself.
 
 ## Environment
 
@@ -40,6 +67,8 @@ Generated local artifacts are intentionally gitignored:
   tasks/
   lessons/
 ```
+
+`.local/tasks` contains local task JSON, and `.local/lessons` contains generated lesson MDX. Codex credentials are not stored under `.local`.
 
 For tests or isolated local runs, set `LOCAL_DATA_ROOT` to another directory.
 
