@@ -38,16 +38,21 @@ function classifyCodexFailure(error: unknown, signal: AbortSignal) {
 }
 
 export class OpenAICodexLessonGenerator implements CodexLessonGenerator {
-  private readonly codex = new Codex({
-    config: {
-      history: { persistence: 'none' },
-      web_search: 'disabled',
-    },
-  });
+  private codex?: Codex;
+
+  private getCodex() {
+    this.codex ??= new Codex({
+      config: {
+        history: { persistence: 'none' },
+        web_search: 'disabled',
+      },
+    });
+    return this.codex;
+  }
 
   async generate(input: CodexGenerationInput) {
     try {
-      const thread = this.codex.startThread({
+      const thread = this.getCodex().startThread({
         workingDirectory: process.cwd(),
         model: input.model,
         sandboxMode: 'read-only',
