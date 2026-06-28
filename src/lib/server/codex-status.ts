@@ -8,6 +8,8 @@ const execFileAsync = promisify(execFile);
 const projectRequire = createRequire(import.meta.url);
 const codexVersionPattern = /^codex-cli\s+\S+$/;
 const signedOutPattern = /not logged in|not authenticated/i;
+const unavailableRuntimePattern =
+  /missing optional dependency|unsupported platform|unable to locate codex cli binaries/i;
 
 function isModuleResolutionError(error: unknown) {
   return (
@@ -30,6 +32,10 @@ function errorOutput(error: unknown) {
   return [processError.stdout, processError.stderr, processError.message]
     .filter((value): value is string => typeof value === 'string')
     .join('\n');
+}
+
+function isUnavailableCodexRuntime(error: unknown) {
+  return unavailableRuntimePattern.test(errorOutput(error));
 }
 
 function resolveCodexLauncher() {
@@ -62,7 +68,11 @@ export async function getCodexStatus(): Promise<CodexStatus> {
       throw new Error(`Unexpected Codex version output: ${JSON.stringify(version)}`);
     }
   } catch (error) {
-    if (isModuleResolutionError(error) || isMissingExecutableError(error)) {
+    if (
+      isModuleResolutionError(error) ||
+      isMissingExecutableError(error) ||
+      isUnavailableCodexRuntime(error)
+    ) {
       return { status: 'not-installed' };
     }
     throw error;
