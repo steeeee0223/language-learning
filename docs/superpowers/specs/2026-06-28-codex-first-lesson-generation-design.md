@@ -200,6 +200,7 @@ Success returns the lesson slug and path. Errors use stable public codes:
 - `USAGE_LIMITED`
 - `GENERATION_TIMEOUT`
 - `GENERATION_INVALID`
+- `GENERATION_FAILED`
 - `GENERATION_IN_PROGRESS`
 - `LESSON_EXISTS`
 - `LESSON_WRITE_FAILED`
