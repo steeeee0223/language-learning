@@ -38,6 +38,6 @@ export async function POST(request: Request, context: GenerateRouteContext) {
     if (error instanceof GenerationError) {
       return jsonError(error.message, error.status, error.code);
     }
-    return jsonError('Codex could not generate the lesson.', 500, 'GENERATION_FAILED');
+    return jsonError('Lesson generation failed.', 502, 'GENERATION_FAILED');
   }
 }
