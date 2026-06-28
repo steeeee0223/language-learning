@@ -11,7 +11,7 @@ import { validateLessonMdx } from './lesson-validator';
 import { lessonExists, writeLessonOnce } from './lesson-writer';
 import { canonicalizeLocalRoot } from './local-paths';
 import { resolveModelPreset } from './model-registry';
-import type { StoredTask } from './task-schema';
+import { LESSON_SKILL_VERSION, type StoredTask } from './task-schema';
 import { tryAcquireTaskOperation } from './task-operation-lock';
 import { readTask, updateTaskGeneration } from './task-store';
 
@@ -112,7 +112,7 @@ export async function generateLesson(
       input.slug,
       {
         status: 'pending',
-        skillVersion: task.generation.skillVersion,
+        skillVersion: LESSON_SKILL_VERSION,
         modelPreset: input.modelPreset,
         requestedModel,
         codexVersion,
@@ -146,7 +146,7 @@ export async function generateLesson(
         input.slug,
         {
           status: 'succeeded',
-          skillVersion: task.generation.skillVersion,
+          skillVersion: LESSON_SKILL_VERSION,
           modelPreset: input.modelPreset,
           requestedModel,
           codexVersion,
@@ -183,7 +183,7 @@ export async function generateLesson(
         input.slug,
         {
           status: 'failed',
-          skillVersion: task.generation.skillVersion,
+          skillVersion: LESSON_SKILL_VERSION,
           modelPreset: input.modelPreset,
           requestedModel,
           codexVersion,

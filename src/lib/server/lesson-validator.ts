@@ -8,7 +8,7 @@ import { visit } from 'unist-util-visit';
 
 import type { CefrLevel, TargetLanguage } from '@/lib/contracts';
 import { validateGeneratedMdx } from '@/lib/lesson-mdx-options';
-import { lessonSectionLabels } from '@/lib/lesson-sections';
+import { lessonSectionHeadings, lessonSectionLabels, orderCefrLevels } from '@/lib/lesson-sections';
 import { GenerationError } from './generation-errors';
 
 type ValidationTask = {
@@ -37,13 +37,18 @@ function sectionNodes(children: RootContent[], headingIndex: number) {
   return children.slice(headingIndex + 1, end === -1 ? children.length : end);
 }
 
-function subsectionNodes(children: RootContent[], headingIndex: number) {
-  const end = children.findIndex((node, index) => index > headingIndex && headingText(node, 3) !== null);
-  return children.slice(headingIndex + 1, end === -1 ? children.length : end);
-}
-
 function hasSubstantiveContent(nodes: RootContent[]) {
   return nodes.some((node) => node.type !== 'heading' && toString(node).trim().length > 0);
+}
+
+function requireTable(nodes: RootContent[], label: string) {
+  if (!nodes.some((node) => node.type === 'table')) invalid(`${label} must contain a table`);
+}
+
+function requireH3(nodes: RootContent[], label: string) {
+  if (!nodes.some((node) => headingText(node, 3) !== null)) {
+    invalid(`${label} must contain at least one H3 subsection`);
+  }
 }
 
 export async function validateLessonMdx(content: string, task: ValidationTask) {
@@ -76,7 +81,10 @@ export async function validateLessonMdx(content: string, task: ValidationTask) {
   if (headingText(children[1], 1) === null) invalid('one H1 must immediately follow YouTubeEmbed');
   if (children.filter((node) => headingText(node, 1) !== null).length !== 1) invalid('exactly one H1 is required');
 
-  const labels = Object.values(lessonSectionLabels[task.learningSettings.targetLanguage]);
+  const labels = lessonSectionHeadings(
+    task.learningSettings.targetLanguage,
+    task.learningSettings.cefrLevels,
+  );
   const h2 = children.map((node, index) => ({ index, text: headingText(node, 2) })).filter((item) => item.text !== null);
   if (JSON.stringify(h2.map((item) => item.text)) !== JSON.stringify(labels)) invalid('required section order is incorrect');
 
@@ -86,23 +94,23 @@ export async function validateLessonMdx(content: string, task: ValidationTask) {
     }
   }
 
-  for (const label of [
-    lessonSectionLabels[task.learningSettings.targetLanguage].vocabulary,
-    lessonSectionLabels[task.learningSettings.targetLanguage].grammar,
-  ]) {
-    const section = h2.find((item) => item.text === label);
-    if (!section) invalid(`${label} section is missing`);
-    const nodes = sectionNodes(children, section.index);
-    const levels = nodes.map((node, index) => ({ index, text: headingText(node, 3) })).filter((item) => item.text !== null);
-    if (JSON.stringify(levels.map((item) => item.text)) !== JSON.stringify(task.learningSettings.cefrLevels)) {
-      invalid(`${label} must contain exactly ${task.learningSettings.cefrLevels.join(', ')} in order`);
-    }
-    for (const level of levels) {
-      if (!hasSubstantiveContent(subsectionNodes(nodes, level.index))) {
-        invalid(`${label} ${level.text} must contain substantive content`);
-      }
-    }
+  const sectionLabels = lessonSectionLabels[task.learningSettings.targetLanguage];
+  for (const label of [sectionLabels.metadata, sectionLabels.translation]) {
+    const section = h2.find((item) => item.text === label)!;
+    requireTable(sectionNodes(children, section.index), label);
   }
+
+  for (const level of orderCefrLevels(task.learningSettings.cefrLevels)) {
+    const vocabularyLabel = `${level} ${sectionLabels.vocabulary}`;
+    const grammarLabel = `${level} ${sectionLabels.grammar}`;
+    const vocabulary = h2.find((item) => item.text === vocabularyLabel)!;
+    const grammar = h2.find((item) => item.text === grammarLabel)!;
+    requireTable(sectionNodes(children, vocabulary.index), vocabularyLabel);
+    requireH3(sectionNodes(children, grammar.index), grammarLabel);
+  }
+
+  const spokenUsage = h2.find((item) => item.text === sectionLabels.spokenUsage)!;
+  requireH3(sectionNodes(children, spokenUsage.index), sectionLabels.spokenUsage);
 
   return content;
 }

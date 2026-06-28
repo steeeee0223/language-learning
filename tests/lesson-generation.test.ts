@@ -56,21 +56,90 @@ async function createStoredTaskFixture(options?: {
 
 const getReadyStatus = async () => ({ status: 'ready' as const, version: 'codex-cli test' });
 
+const canonicalLevelLesson = `<YouTubeEmbed videoId="jNQXAC9IVRw" title="Me at the zoo" />
+
+# 我在動物園
+
+## 課程資訊
+
+| 欄位 | 內容 |
+| --- | --- |
+| 影片 | Me at the zoo |
+
+## 逐句翻譯
+
+| 原文 | 繁體中文 |
+| --- | --- |
+| Here we are at the zoo. | 我們在動物園。 |
+
+## A1 詞彙
+
+| 英文 | 繁體中文 | 用法說明 |
+| --- | --- | --- |
+| zoo | 動物園 | 名詞 |
+
+## A1 文法
+
+### 1. Here we are
+
+用來表示抵達某處。
+
+## A2 詞彙
+
+| 英文 | 繁體中文 | 用法說明 |
+| --- | --- | --- |
+| behind | 後方 | 位置詞 |
+
+## A2 文法
+
+### 1. behind me
+
+用來描述相對位置。
+
+## 口語用法
+
+### 抵達時的說法
+
+口語常說「Here we are」。
+`;
+
 describe('buildLessonPrompt', () => {
-  it('inlines the required Traditional Chinese MDX contract', async () => {
+  it('delegates the output contract to the generating-lesson skill', async () => {
     const rootDir = await createStoredTaskFixture();
     const prompt = buildLessonPrompt(await readTask('lesson', rootDir));
 
-    assert.match(prompt, /Traditional Chinese \(繁體中文; never Simplified Chinese\)/);
-    assert.match(prompt, /<YouTubeEmbed videoId="jNQXAC9IVRw"/);
-    assert.match(prompt, /Do not include YAML frontmatter/);
-    assert.match(prompt, /Do not use iframe/);
-    assert.match(prompt, /## 影片資訊[\s\S]*## 逐句翻譯[\s\S]*## CEFR 分級詞彙/);
-    assert.match(prompt, /### A2; ### B1/);
+    assert.match(prompt, /^Use \$generating-lesson/);
+    assert.match(prompt, /Target language: zh/);
+    assert.match(prompt, /CEFR levels: A2, B1/);
+    assert.doesNotMatch(prompt, /Mandatory output contract|## 課程資訊|## CEFR/);
   });
 });
 
 describe('validateLessonMdx', () => {
+  it('accepts one vocabulary and grammar section per CEFR level in canonical order', async () => {
+    await assert.doesNotReject(() =>
+      validateLessonMdx(canonicalLevelLesson, {
+        video: task.video,
+        learningSettings: { targetLanguage: 'zh', cefrLevels: ['A2', 'A1'] },
+      }),
+    );
+  });
+
+  it('requires the canonical table and subsection components', async () => {
+    const validationTask = {
+      video: task.video,
+      learningSettings: { targetLanguage: 'zh' as const, cefrLevels: ['A2', 'A1'] as const },
+    };
+    const withoutInfoTable = canonicalLevelLesson.replace(
+      '| 欄位 | 內容 |\n| --- | --- |\n| 影片 | Me at the zoo |',
+      '影片：Me at the zoo',
+    );
+    const withoutGrammarSubheading = canonicalLevelLesson.replace('### 1. Here we are\n\n', '');
+
+    await assert.rejects(() => validateLessonMdx(withoutInfoTable, validationTask), /table/i);
+    await assert.rejects(() => validateLessonMdx(withoutGrammarSubheading, validationTask), /H3/i);
+  });
+
   it('accepts the canonical generated lesson', async () => {
     const content = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
     await assert.doesNotReject(() => validateLessonMdx(content, task));
@@ -78,7 +147,10 @@ describe('validateLessonMdx', () => {
 
   it('rejects missing levels, code fences, and executable MDX', async () => {
     const content = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
-    await assert.rejects(() => validateLessonMdx(content.replace('### B1', '### C1'), task), /B1/);
+    await assert.rejects(
+      () => validateLessonMdx(content.replace('## B1 詞彙', '## C1 詞彙'), task),
+      /section order/,
+    );
     await assert.rejects(() => validateLessonMdx(`\`\`\`mdx\n${content}\n\`\`\``, task), /code fence/);
     await assert.rejects(() => validateLessonMdx(`${content}\n\n{globalThis.process.exit()}`, task), isGenerationInvalid);
     await assert.rejects(() => validateLessonMdx(`${content}\n\n<Broken`, task), isGenerationInvalid);
@@ -108,28 +180,27 @@ describe('validateLessonMdx', () => {
 
 # 我在動物園
 
-## 影片資訊
+## 課程資訊
 
 ## 逐句翻譯
 
-## CEFR 分級詞彙
+## A2 詞彙
 
-### A2
+## A2 文法
 
-### B1
+## B1 詞彙
 
-## CEFR 分級文法
-
-### A2
-
-### B1
+## B1 文法
 
 ## 口語用法
 `;
     await assert.rejects(() => validateLessonMdx(shell, task), /substantive content/);
 
     const content = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
-    const missingA2Vocabulary = content.replace('- **zoo**：動物園\n\n### B1', '### B1');
+    const missingA2Vocabulary = content.replace(
+      '| 英文 | 繁體中文 | 用法說明 |\n| --- | --- | --- |\n| zoo | 動物園 | 表示展示動物的場所。 |\n\n',
+      '',
+    );
     await assert.rejects(() => validateLessonMdx(missingA2Vocabulary, task), /A2.*substantive content/);
   });
 });
@@ -180,6 +251,7 @@ describe('lesson persistence and generation coordination', () => {
     assert.equal(details.stage, 'validation');
     assert.equal(details.generatedOutputPath, `.local/errors/lesson/${attempts[0]}/generated.mdx`);
     assert.equal(await readFile(join(attemptDir, 'generated.mdx'), 'utf8'), '# invalid');
+    assert.equal((await readTask('lesson', rootDir)).generation.skillVersion, '2');
   });
 
   it('writes error details when generation fails before returning content', async () => {
