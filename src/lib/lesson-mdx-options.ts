@@ -6,7 +6,7 @@ import { visit } from 'unist-util-visit';
 
 const youtubeIdPattern = /^[A-Za-z0-9_-]{11}$/;
 const allowedTableElements = new Set(['caption', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr']);
-const rejectedNodeTypes = new Set(['mdxFlowExpression', 'mdxTextExpression', 'mdxjsEsm']);
+const rejectedNodeTypes = new Set(['html', 'mdxFlowExpression', 'mdxTextExpression', 'mdxjsEsm']);
 
 type SyntaxTree = Parameters<typeof visit>[0];
 
@@ -82,7 +82,7 @@ function validateJsxElement(node: MdxNode) {
   reject(`<${node.name}> is not in the generated MDX allowlist`);
 }
 
-function validateGeneratedMdx() {
+export function validateGeneratedMdx() {
   return (tree: SyntaxTree) => {
     visit(tree, (rawNode) => {
       const node = rawNode as MdxNode;
