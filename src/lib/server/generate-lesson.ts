@@ -1,5 +1,3 @@
-import { resolve } from 'node:path';
-
 import type { ModelPreset } from '@/lib/generation-contracts';
 import {
   OpenAICodexLessonGenerator,
@@ -10,6 +8,7 @@ import { GenerationError } from './generation-errors';
 import { buildLessonPrompt } from './lesson-prompt';
 import { validateLessonMdx } from './lesson-validator';
 import { lessonExists, writeLessonOnce } from './lesson-writer';
+import { canonicalizeLocalRoot } from './local-paths';
 import { resolveModelPreset } from './model-registry';
 import type { StoredTask } from './task-schema';
 import { readTask, updateTaskGeneration } from './task-store';
@@ -25,15 +24,48 @@ type GenerateLessonDependencies = {
   generator?: CodexLessonGenerator;
   getStatus?: typeof getCodexStatus;
   timeoutMs?: number;
+  updateGeneration?: typeof updateTaskGeneration;
 };
 
 const activeTasks = new Set<string>();
+
+function generationTimeout(cause?: unknown) {
+  return new GenerationError('GENERATION_TIMEOUT', 'Lesson generation timed out.', { cause });
+}
+
+function throwIfGenerationAborted(signal: AbortSignal) {
+  if (signal.aborted) throw generationTimeout(signal.reason);
+}
+
+async function generateUntilAbort(
+  generator: CodexLessonGenerator,
+  input: Parameters<CodexLessonGenerator['generate']>[0],
+) {
+  throwIfGenerationAborted(input.signal);
+  let onAbort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(generationTimeout(input.signal.reason));
+    input.signal.addEventListener('abort', onAbort, { once: true });
+    if (input.signal.aborted) onAbort();
+  });
+
+  try {
+    return await Promise.race([Promise.resolve().then(() => generator.generate(input)), aborted]);
+  } finally {
+    input.signal.removeEventListener('abort', onAbort);
+  }
+}
 
 export async function generateLesson(
   input: GenerateLessonInput,
   dependencies: GenerateLessonDependencies = {},
 ): Promise<{ lessonSlug: string; lessonPath: string }> {
-  const dataRoot = resolve(input.rootDir ?? process.env.LOCAL_DATA_ROOT ?? process.cwd());
+  let dataRoot: string;
+  try {
+    dataRoot = await canonicalizeLocalRoot(input.rootDir);
+  } catch (cause) {
+    throw new GenerationError('GENERATION_FAILED', 'Codex could not generate the lesson.', { cause });
+  }
   const lockKey = `${dataRoot}:${input.slug}`;
   if (activeTasks.has(lockKey)) {
     throw new GenerationError('GENERATION_IN_PROGRESS', 'This task is already being generated.');
@@ -43,16 +75,26 @@ export async function generateLesson(
   let task: StoredTask | undefined;
   let startedAt: string | undefined;
   let codexVersion: string | undefined;
-  const requestedModel = resolveModelPreset(input.modelPreset);
+  let requestedModel: string | undefined;
+  let pendingRecorded = false;
+  const updateGeneration = dependencies.updateGeneration ?? updateTaskGeneration;
 
   try {
-    task = await readTask(input.slug, input.rootDir);
-    startedAt = new Date().toISOString();
+    task = await readTask(input.slug, dataRoot);
 
-    if (await lessonExists({ rootDir: input.rootDir, slug: input.slug })) {
+    const expectedOutputPath = `.local/lessons/${input.slug}.mdx`;
+    if (task.output.path !== expectedOutputPath) {
+      throw new GenerationError(
+        'GENERATION_INVALID',
+        'The task output path does not match the requested lesson.',
+      );
+    }
+
+    if (await lessonExists({ rootDir: dataRoot, slug: input.slug })) {
       throw new GenerationError('LESSON_EXISTS', 'A lesson already exists for this task.');
     }
 
+    requestedModel = resolveModelPreset(input.modelPreset);
     const status = await (dependencies.getStatus ?? getCodexStatus)();
     if (status.status === 'not-installed') {
       throw new GenerationError('CODEX_NOT_INSTALLED', 'The local Codex runtime is unavailable.');
@@ -61,8 +103,9 @@ export async function generateLesson(
       throw new GenerationError('CODEX_NOT_AUTHENTICATED', 'Sign in to Codex and try again.');
     }
     codexVersion = status.version;
+    startedAt = new Date().toISOString();
 
-    await updateTaskGeneration(
+    await updateGeneration(
       input.slug,
       {
         status: 'pending',
@@ -72,32 +115,42 @@ export async function generateLesson(
         codexVersion,
         startedAt,
       },
-      input.rootDir,
+      dataRoot,
     );
+    pendingRecorded = true;
 
     const generator = dependencies.generator ?? new OpenAICodexLessonGenerator();
     const timeoutSignal = AbortSignal.timeout(dependencies.timeoutMs ?? 180_000);
-    const content = await generator.generate({
+    const generationSignal = input.signal
+      ? AbortSignal.any([input.signal, timeoutSignal])
+      : timeoutSignal;
+    const content = await generateUntilAbort(generator, {
       prompt: buildLessonPrompt(task),
       model: requestedModel,
-      signal: input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal,
+      signal: generationSignal,
     });
+    throwIfGenerationAborted(generationSignal);
     await validateLessonMdx(content, task);
-    const result = await writeLessonOnce({ rootDir: input.rootDir, slug: input.slug, content });
+    throwIfGenerationAborted(generationSignal);
+    const result = await writeLessonOnce({ rootDir: dataRoot, slug: input.slug, content });
 
-    await updateTaskGeneration(
-      input.slug,
-      {
-        status: 'succeeded',
-        skillVersion: task.generation.skillVersion,
-        modelPreset: input.modelPreset,
-        requestedModel,
-        codexVersion,
-        startedAt,
-        completedAt: new Date().toISOString(),
-      },
-      input.rootDir,
-    );
+    try {
+      await updateGeneration(
+        input.slug,
+        {
+          status: 'succeeded',
+          skillVersion: task.generation.skillVersion,
+          modelPreset: input.modelPreset,
+          requestedModel,
+          codexVersion,
+          startedAt,
+          completedAt: new Date().toISOString(),
+        },
+        dataRoot,
+      );
+    } catch {
+      // The published lesson is the commit point; metadata repair can happen separately.
+    }
 
     return result;
   } catch (cause) {
@@ -106,8 +159,8 @@ export async function generateLesson(
         ? cause
         : new GenerationError('GENERATION_FAILED', 'Codex could not generate the lesson.', { cause });
 
-    if (task && startedAt) {
-      await updateTaskGeneration(
+    if (task && startedAt && pendingRecorded) {
+      await updateGeneration(
         input.slug,
         {
           status: 'failed',
@@ -119,7 +172,7 @@ export async function generateLesson(
           completedAt: new Date().toISOString(),
           errorCode: error.code,
         },
-        input.rootDir,
+        dataRoot,
       ).catch(() => undefined);
     }
 
