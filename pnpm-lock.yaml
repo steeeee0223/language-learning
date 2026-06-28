@@ -11,6 +11,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.6.0
         version: 1.6.0(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@openai/codex':
+        specifier: 0.142.3
+        version: 0.142.3
       '@openai/codex-sdk':
         specifier: 0.142.3
         version: 0.142.3

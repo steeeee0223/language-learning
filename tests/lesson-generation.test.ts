@@ -8,6 +8,7 @@ import { generateLesson } from '@/lib/server/generate-lesson.ts';
 import { GenerationError } from '@/lib/server/generation-errors.ts';
 import { ensureLocalDirs } from '@/lib/server/local-paths.ts';
 import { readTask } from '@/lib/server/task-store.ts';
+import { buildTaskFile } from '@/lib/server/tasks.ts';
 import { validateLessonMdx } from '@/lib/server/lesson-validator.ts';
 import { writeLessonOnce } from '@/lib/server/lesson-writer.ts';
 import { storedTaskSchema } from '@/lib/server/task-schema.ts';
@@ -253,6 +254,74 @@ describe('lesson persistence and generation coordination', () => {
     );
     release();
     await first;
+    assert.equal(calls, 1);
+  });
+
+  it('does not overwrite a task while its lesson is being generated', async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), 'lesson-preparation-lock-'));
+    const now = new Date('2026-06-28T00:00:00.000Z');
+    const input = {
+      rootDir,
+      now,
+      video: {
+        url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+        id: 'jNQXAC9IVRw',
+        title: 'Me at the zoo',
+      },
+      transcript: {
+        source: 'youtube-transcript.io' as const,
+        segments: [{ text: 'Here we are at the zoo.', start: 0, duration: 1 }],
+      },
+      learningSettings: {
+        targetLanguage: 'zh' as const,
+        cefrLevels: ['A2' as const, 'B1' as const],
+      },
+    };
+    const prepared = await buildTaskFile(input);
+    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
+    let calls = 0;
+    let release!: () => void;
+    let generationStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      generationStarted = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = generateLesson(
+      { slug: prepared.taskSlug, modelPreset: 'best', rootDir },
+      {
+        generator: {
+          generate: async () => {
+            calls += 1;
+            generationStarted();
+            await blocked;
+            return validLesson;
+          },
+        },
+        getStatus: getReadyStatus,
+      },
+    );
+    await started;
+
+    try {
+      await assert.rejects(
+        () =>
+          buildTaskFile({
+            ...input,
+            learningSettings: { targetLanguage: 'en', cefrLevels: ['B2'] },
+          }),
+        /currently being generated/,
+      );
+      assert.deepEqual((await readTask(prepared.taskSlug, rootDir)).learningSettings, {
+        targetLanguage: 'zh',
+        cefrLevels: ['A2', 'B1'],
+      });
+    } finally {
+      release();
+      await first;
+    }
+
     assert.equal(calls, 1);
   });
 

@@ -11,6 +11,7 @@ import { lessonExists, writeLessonOnce } from './lesson-writer';
 import { canonicalizeLocalRoot } from './local-paths';
 import { resolveModelPreset } from './model-registry';
 import type { StoredTask } from './task-schema';
+import { tryAcquireTaskOperation } from './task-operation-lock';
 import { readTask, updateTaskGeneration } from './task-store';
 
 type GenerateLessonInput = {
@@ -26,8 +27,6 @@ type GenerateLessonDependencies = {
   timeoutMs?: number;
   updateGeneration?: typeof updateTaskGeneration;
 };
-
-const activeTasks = new Set<string>();
 
 function generationTimeout(cause?: unknown) {
   return new GenerationError('GENERATION_TIMEOUT', 'Lesson generation timed out.', { cause });
@@ -66,12 +65,11 @@ export async function generateLesson(
   } catch (cause) {
     throw new GenerationError('GENERATION_FAILED', 'Codex could not generate the lesson.', { cause });
   }
-  const lockKey = `${dataRoot}:${input.slug}`;
-  if (activeTasks.has(lockKey)) {
+  const releaseTaskOperation = tryAcquireTaskOperation(dataRoot, input.slug);
+  if (!releaseTaskOperation) {
     throw new GenerationError('GENERATION_IN_PROGRESS', 'This task is already being generated.');
   }
 
-  activeTasks.add(lockKey);
   let task: StoredTask | undefined;
   let startedAt: string | undefined;
   let codexVersion: string | undefined;
@@ -178,6 +176,6 @@ export async function generateLesson(
 
     throw error;
   } finally {
-    activeTasks.delete(lockKey);
+    releaseTaskOperation();
   }
 }

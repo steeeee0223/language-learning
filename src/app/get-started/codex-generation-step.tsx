@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Copy, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ZodType } from 'zod';
 
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,10 @@ import {
   type ModelPreset,
 } from '@/lib/generation-contracts';
 
-type CodexGenerationStepProps = { taskSlug: string | null };
+type CodexGenerationStepProps = {
+  taskSlug: string | null;
+  onPendingChange: (isPending: boolean) => void;
+};
 
 async function readJson<T>(response: Response, schema: ZodType<T>): Promise<T> {
   const payload: unknown = await response.json().catch(() => null);
@@ -39,7 +42,7 @@ const modelOptions: Array<{
   { value: 'best', label: 'Best quality', description: 'More consistent lesson quality.' },
 ];
 
-export function CodexGenerationStep({ taskSlug }: CodexGenerationStepProps) {
+export function CodexGenerationStep({ taskSlug, onPendingChange }: CodexGenerationStepProps) {
   const router = useRouter();
   const [modelPreset, setModelPreset] = useState<ModelPreset>('best');
   const statusQuery = useQuery({
@@ -64,6 +67,11 @@ export function CodexGenerationStep({ taskSlug }: CodexGenerationStepProps) {
     onSuccess: ({ lessonSlug }) => router.push(`/lessons/${lessonSlug}`),
   });
   const status = statusQuery.data?.status;
+
+  useEffect(() => {
+    onPendingChange(generation.isPending);
+    return () => onPendingChange(false);
+  }, [generation.isPending, onPendingChange]);
 
   return (
     <section className="rounded-md border bg-card p-5 text-card-foreground">
@@ -125,12 +133,22 @@ export function CodexGenerationStep({ taskSlug }: CodexGenerationStepProps) {
       <FieldSet className="mt-5">
         <FieldLegend variant="label">Model</FieldLegend>
         <RadioGroup
+          disabled={generation.isPending}
           value={modelPreset}
           onValueChange={(value) => setModelPreset(value as ModelPreset)}
         >
           {modelOptions.map((option) => (
-            <Field key={option.value} orientation="horizontal" className="rounded-md border p-3">
-              <RadioGroupItem id={`model-${option.value}`} value={option.value} />
+            <Field
+              key={option.value}
+              data-disabled={generation.isPending}
+              orientation="horizontal"
+              className="rounded-md border p-3"
+            >
+              <RadioGroupItem
+                id={`model-${option.value}`}
+                value={option.value}
+                disabled={generation.isPending}
+              />
               <FieldLabel
                 className="flex-col items-start gap-0.5"
                 htmlFor={`model-${option.value}`}

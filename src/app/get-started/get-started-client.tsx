@@ -42,6 +42,7 @@ export function GetStartedClient() {
   const [targetLanguage, setTargetLanguage] = useState<LearningSettings['targetLanguage']>('zh');
   const [selectedLevels, setSelectedLevels] = useState<CefrLevel[]>(['A2', 'B1']);
   const [clientError, setClientError] = useState<string | null>(null);
+  const [generationPending, setGenerationPending] = useState(false);
 
   const transcriptMutation = useMutation({
     mutationFn: (url: string) => postJson('/api/transcripts', { url }, transcriptBundleSchema),
@@ -73,6 +74,10 @@ export function GetStartedClient() {
 
   function submitUrl(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (generationPending) {
+      return;
+    }
+
     setClientError(null);
     taskMutation.reset();
 
@@ -85,6 +90,10 @@ export function GetStartedClient() {
   }
 
   function toggleLevel(level: CefrLevel) {
+    if (generationPending) {
+      return;
+    }
+
     taskMutation.reset();
     setSelectedLevels((current) =>
       current.includes(level) ? current.filter((item) => item !== level) : [...current, level],
@@ -92,12 +101,20 @@ export function GetStartedClient() {
   }
 
   function selectTargetLanguage(value: LearningSettings['targetLanguage']) {
+    if (generationPending) {
+      return;
+    }
+
     setTargetLanguage(value);
     taskMutation.reset();
   }
 
   function submitTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (generationPending) {
+      return;
+    }
+
     if (selectedLevels.length === 0) {
       setClientError('Select at least one CEFR level.');
       return;
@@ -117,13 +134,14 @@ export function GetStartedClient() {
             <h2 className="text-lg font-semibold text-foreground">1. Fetch transcript</h2>
           </div>
           <form className="mt-5 flex flex-col gap-4" onSubmit={submitUrl}>
-            <Field>
+            <Field data-disabled={generationPending}>
               <FieldLabel htmlFor="youtube-url">YouTube video URL</FieldLabel>
               <Input
                 id="youtube-url"
                 className="h-10"
                 placeholder="https://www.youtube.com/watch?v=..."
                 value={youtubeUrl}
+                disabled={generationPending}
                 onChange={(event) => setYoutubeUrl(event.target.value)}
               />
             </Field>
@@ -131,7 +149,7 @@ export function GetStartedClient() {
               className="w-fit"
               size="lg"
               type="submit"
-              disabled={transcriptMutation.isPending}
+              disabled={generationPending || transcriptMutation.isPending}
             >
               {transcriptMutation.isPending ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : <Wand2 data-icon="inline-start" aria-hidden />}
               Fetch Transcript
@@ -180,6 +198,7 @@ export function GetStartedClient() {
               <FieldLegend variant="label">Target translation language</FieldLegend>
               <RadioGroup
                 className="grid-cols-2"
+                disabled={generationPending}
                 value={targetLanguage}
                 onValueChange={(value) =>
                   selectTargetLanguage(value as LearningSettings['targetLanguage'])
@@ -189,8 +208,17 @@ export function GetStartedClient() {
                   ['zh', 'Chinese'],
                   ['en', 'English'],
                 ].map(([value, label]) => (
-                  <Field key={value} orientation="horizontal" className="h-10 rounded-md border px-3">
-                    <RadioGroupItem id={`target-language-${value}`} value={value} />
+                  <Field
+                    key={value}
+                    data-disabled={generationPending}
+                    orientation="horizontal"
+                    className="h-10 rounded-md border px-3"
+                  >
+                    <RadioGroupItem
+                      id={`target-language-${value}`}
+                      value={value}
+                      disabled={generationPending}
+                    />
                     <FieldLabel htmlFor={`target-language-${value}`}>{label}</FieldLabel>
                   </Field>
                 ))}
@@ -201,8 +229,18 @@ export function GetStartedClient() {
               <FieldLegend variant="label">CEFR levels</FieldLegend>
               <FieldGroup className="grid grid-cols-3 gap-2">
                 {cefrLevels.map((level) => (
-                  <Field key={level} orientation="horizontal" className="h-10 rounded-md border px-3">
-                    <Checkbox id={`cefr-${level}`} checked={selectedLevels.includes(level)} onCheckedChange={() => toggleLevel(level)} />
+                  <Field
+                    key={level}
+                    data-disabled={generationPending}
+                    orientation="horizontal"
+                    className="h-10 rounded-md border px-3"
+                  >
+                    <Checkbox
+                      id={`cefr-${level}`}
+                      checked={selectedLevels.includes(level)}
+                      disabled={generationPending}
+                      onCheckedChange={() => toggleLevel(level)}
+                    />
                     <FieldLabel htmlFor={`cefr-${level}`}>{level}</FieldLabel>
                   </Field>
                 ))}
@@ -213,7 +251,9 @@ export function GetStartedClient() {
               className="w-fit"
               size="lg"
               type="submit"
-              disabled={!transcriptMutation.data || taskMutation.isPending}
+              disabled={
+                generationPending || !transcriptMutation.data || taskMutation.isPending
+              }
             >
               {taskMutation.isPending ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : <ClipboardList data-icon="inline-start" aria-hidden />}
               Prepare Lesson
@@ -232,7 +272,11 @@ export function GetStartedClient() {
             </div>
           )}
         </section>
-        <CodexGenerationStep taskSlug={taskMutation.data?.taskSlug ?? null} />
+        <CodexGenerationStep
+          key={`${taskMutation.submittedAt}:${taskMutation.data?.taskSlug ?? 'unprepared'}`}
+          taskSlug={taskMutation.data?.taskSlug ?? null}
+          onPendingChange={setGenerationPending}
+        />
     </div>
   );
 }
