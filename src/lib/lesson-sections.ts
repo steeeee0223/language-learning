@@ -1,5 +1,9 @@
 import type { TargetLanguage } from '@/lib/contracts';
 
+export const lessonSectionKeys = ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'] as const;
+
+export type LessonSection = (typeof lessonSectionKeys)[number];
+
 export const lessonSectionLabels = {
   en: {
     metadata: 'Video information',
@@ -15,4 +19,4 @@ export const lessonSectionLabels = {
     grammar: 'CEFR 分級文法',
     spokenUsage: '口語用法',
   },
-} as const satisfies Record<TargetLanguage, Record<string, string>>;
+} as const satisfies Record<TargetLanguage, Record<LessonSection, string>>;

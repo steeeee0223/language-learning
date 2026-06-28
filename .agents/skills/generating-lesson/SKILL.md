@@ -7,7 +7,7 @@ description: Generate one complete language-learning lesson as MDX from a video 
 
 1. Read [the lesson contract](references/lesson-contract.md) fully.
 2. Read [the example lesson](references/example-lesson.mdx) before drafting.
-3. Use only the prompt transcript and settings as source material.
+3. Use supplied video metadata only for the embed, title, and metadata fields; use only the prompt transcript and settings for lesson analysis and factual teaching content.
 4. Honor the target language and every requested CEFR level.
 5. Return only the final MDX without an introduction, explanation, or code fence.
 6. Do not execute commands, browse, or edit files.
