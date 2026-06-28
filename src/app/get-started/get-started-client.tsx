@@ -3,39 +3,38 @@
 import { useMutation } from '@tanstack/react-query';
 import { CheckCircle2, ClipboardList, Loader2, Play, Wand2 } from 'lucide-react';
 import { FormEvent, useMemo, useState } from 'react';
+import type { ZodType } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { cefrLevels, type CefrLevel, type LearningSettings, type NormalizedTranscript, type VideoMetadata } from '@/lib/contracts';
+import {
+  cefrLevels,
+  transcriptBundleSchema,
+  type CefrLevel,
+  type LearningSettings,
+} from '@/lib/contracts';
+import { apiErrorResponseSchema, taskCreationResponseSchema } from '@/lib/generation-contracts';
 import { parseYouTubeVideoId } from '@/lib/youtube';
 
-type TranscriptResponse = {
-  video: VideoMetadata;
-  transcript: NormalizedTranscript;
-};
+import { CodexGenerationStep } from './codex-generation-step';
 
-type TaskResponse = {
-  taskPath: string;
-  outputPath: string;
-  suggestedCommand: string;
-};
-
-async function postJson<T>(url: string, body: unknown): Promise<T> {
+async function postJson<T>(url: string, body: unknown, schema: ZodType<T>): Promise<T> {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  const payload = await response.json();
+  const payload: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(payload.error ?? 'Request failed.');
+    const error = apiErrorResponseSchema.safeParse(payload);
+    throw new Error(error.success ? error.data.error : 'Request failed.');
   }
 
-  return payload;
+  return schema.parse(payload);
 }
 
 export function GetStartedClient() {
@@ -45,7 +44,7 @@ export function GetStartedClient() {
   const [clientError, setClientError] = useState<string | null>(null);
 
   const transcriptMutation = useMutation({
-    mutationFn: (url: string) => postJson<TranscriptResponse>('/api/transcripts', { url }),
+    mutationFn: (url: string) => postJson('/api/transcripts', { url }, transcriptBundleSchema),
   });
   const taskMutation = useMutation({
     mutationFn: (settings: LearningSettings) => {
@@ -53,10 +52,14 @@ export function GetStartedClient() {
         throw new Error('Fetch a transcript first.');
       }
 
-      return postJson<TaskResponse>('/api/tasks', {
-        ...transcriptMutation.data,
-        learningSettings: settings,
-      });
+      return postJson(
+        '/api/tasks',
+        {
+          ...transcriptMutation.data,
+          learningSettings: settings,
+        },
+        taskCreationResponseSchema,
+      );
     },
   });
 
@@ -82,9 +85,15 @@ export function GetStartedClient() {
   }
 
   function toggleLevel(level: CefrLevel) {
+    taskMutation.reset();
     setSelectedLevels((current) =>
       current.includes(level) ? current.filter((item) => item !== level) : [...current, level],
     );
+  }
+
+  function selectTargetLanguage(value: LearningSettings['targetLanguage']) {
+    setTargetLanguage(value);
+    taskMutation.reset();
   }
 
   function submitTask(event: FormEvent<HTMLFormElement>) {
@@ -172,7 +181,9 @@ export function GetStartedClient() {
               <RadioGroup
                 className="grid-cols-2"
                 value={targetLanguage}
-                onValueChange={(value) => setTargetLanguage(value as LearningSettings['targetLanguage'])}
+                onValueChange={(value) =>
+                  selectTargetLanguage(value as LearningSettings['targetLanguage'])
+                }
               >
                 {[
                   ['zh', 'Chinese'],
@@ -205,7 +216,7 @@ export function GetStartedClient() {
               disabled={!transcriptMutation.data || taskMutation.isPending}
             >
               {taskMutation.isPending ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : <ClipboardList data-icon="inline-start" aria-hidden />}
-              Create Local Task
+              Prepare Lesson
             </Button>
           </form>
 
@@ -214,14 +225,14 @@ export function GetStartedClient() {
           )}
 
           {taskMutation.data && (
-            <div className="mt-5 flex flex-col gap-3 rounded-md bg-zinc-950 p-4 text-sm text-white">
-              <p className="font-medium">Task created</p>
-              <p className="font-mono text-zinc-300">{taskMutation.data.taskPath}</p>
-              <p className="font-mono text-zinc-300">{taskMutation.data.outputPath}</p>
-              <pre className="overflow-x-auto rounded-md bg-black/40 p-3 text-xs text-zinc-100">{taskMutation.data.suggestedCommand}</pre>
+            <div className="mt-5 flex flex-col gap-3 rounded-md bg-muted p-4 text-sm">
+              <p className="font-medium text-foreground">Task ready</p>
+              <p className="font-mono text-muted-foreground">{taskMutation.data.taskPath}</p>
+              <p className="font-mono text-muted-foreground">{taskMutation.data.outputPath}</p>
             </div>
           )}
         </section>
+        <CodexGenerationStep taskSlug={taskMutation.data?.taskSlug ?? null} />
     </div>
   );
 }
