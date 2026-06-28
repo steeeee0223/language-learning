@@ -14,6 +14,8 @@ const statusByCode: Record<GenerationErrorCode, number> = {
 };
 
 export class GenerationError extends Error {
+  diagnosticsPath?: string;
+
   constructor(
     public readonly code: GenerationErrorCode,
     message: string,

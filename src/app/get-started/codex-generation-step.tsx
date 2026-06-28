@@ -21,12 +21,21 @@ type CodexGenerationStepProps = {
   onPendingChange: (isPending: boolean) => void;
 };
 
+class ApiRequestError extends Error {
+  constructor(message: string, public readonly errorPath?: string) {
+    super(message);
+  }
+}
+
 async function readJson<T>(response: Response, schema: ZodType<T>): Promise<T> {
   const payload: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
     const error = apiErrorResponseSchema.safeParse(payload);
-    throw new Error(error.success ? error.data.error : 'Request failed.');
+    throw new ApiRequestError(
+      error.success ? error.data.error : 'Request failed.',
+      error.success ? error.data.errorPath : undefined,
+    );
   }
 
   return schema.parse(payload);
@@ -181,9 +190,15 @@ export function CodexGenerationStep({ taskSlug, onPendingChange }: CodexGenerati
         {generation.isPending ? 'Generating lesson…' : 'Generate Lesson'}
       </Button>
       {generation.error ? (
-        <p role="alert" className="mt-4 text-sm text-destructive">
-          {generation.error.message}
-        </p>
+        <div role="alert" className="mt-4 space-y-2 text-sm text-destructive">
+          <p>{generation.error.message}</p>
+          {generation.error instanceof ApiRequestError && generation.error.errorPath ? (
+            <p className="text-muted-foreground">
+              Debug details saved to{' '}
+              <code className="break-all">{generation.error.errorPath}</code>
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { generateLesson } from '@/lib/server/generate-lesson.ts';
 import { GenerationError } from '@/lib/server/generation-errors.ts';
+import { buildLessonPrompt } from '@/lib/server/lesson-prompt.ts';
 import { ensureLocalDirs } from '@/lib/server/local-paths.ts';
 import { readTask } from '@/lib/server/task-store.ts';
 import { buildTaskFile } from '@/lib/server/tasks.ts';
@@ -54,6 +55,20 @@ async function createStoredTaskFixture(options?: {
 }
 
 const getReadyStatus = async () => ({ status: 'ready' as const, version: 'codex-cli test' });
+
+describe('buildLessonPrompt', () => {
+  it('inlines the required Traditional Chinese MDX contract', async () => {
+    const rootDir = await createStoredTaskFixture();
+    const prompt = buildLessonPrompt(await readTask('lesson', rootDir));
+
+    assert.match(prompt, /Traditional Chinese \(繁體中文; never Simplified Chinese\)/);
+    assert.match(prompt, /<YouTubeEmbed videoId="jNQXAC9IVRw"/);
+    assert.match(prompt, /Do not include YAML frontmatter/);
+    assert.match(prompt, /Do not use iframe/);
+    assert.match(prompt, /## 影片資訊[\s\S]*## 逐句翻譯[\s\S]*## CEFR 分級詞彙/);
+    assert.match(prompt, /### A2; ### B1/);
+  });
+});
 
 describe('validateLessonMdx', () => {
   it('accepts the canonical generated lesson', async () => {
@@ -141,12 +156,61 @@ describe('lesson persistence and generation coordination', () => {
             getStatus: getReadyStatus,
           },
         ),
-      /invalid/i,
+      (error: unknown) => {
+        assert.ok(error instanceof GenerationError);
+        assert.match(error.message, /invalid/i);
+        assert.match(
+          error.diagnosticsPath ?? '',
+          /^\.local\/errors\/lesson\/[^/]+\/error\.json$/,
+        );
+        return true;
+      },
     );
     await assert.rejects(
       () => readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'),
       /ENOENT/,
     );
+
+    const attempts = await readdir(join(rootDir, '.local/errors/lesson'));
+    assert.equal(attempts.length, 1);
+    const attemptDir = join(rootDir, '.local/errors/lesson', attempts[0]!);
+    const details = JSON.parse(await readFile(join(attemptDir, 'error.json'), 'utf8'));
+    assert.equal(details.taskId, 'lesson');
+    assert.equal(details.code, 'GENERATION_INVALID');
+    assert.equal(details.stage, 'validation');
+    assert.equal(details.generatedOutputPath, `.local/errors/lesson/${attempts[0]}/generated.mdx`);
+    assert.equal(await readFile(join(attemptDir, 'generated.mdx'), 'utf8'), '# invalid');
+  });
+
+  it('writes error details when generation fails before returning content', async () => {
+    const rootDir = await createStoredTaskFixture();
+
+    await assert.rejects(
+      () =>
+        generateLesson(
+          { slug: 'lesson', modelPreset: 'best', rootDir },
+          {
+            generator: {
+              generate: async () => {
+                throw new Error('SDK transport failed');
+              },
+            },
+            getStatus: getReadyStatus,
+          },
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof GenerationError);
+        assert.equal(error.code, 'GENERATION_FAILED');
+        assert.equal(error.diagnosticsPath, '.local/errors/lesson.json');
+        return true;
+      },
+    );
+
+    const details = JSON.parse(await readFile(join(rootDir, '.local/errors/lesson.json'), 'utf8'));
+    assert.equal(details.stage, 'generation');
+    assert.equal(details.error.cause.message, 'SDK transport failed');
+    assert.equal('generatedOutputPath' in details, false);
+    await assert.rejects(() => readFile(join(rootDir, '.local/errors/lesson/generated.mdx'), 'utf8'), /ENOENT/);
   });
 
   it('rejects an existing lesson before spending a model call', async () => {

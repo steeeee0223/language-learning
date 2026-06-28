@@ -5,12 +5,14 @@ function getLocalPaths(baseDir: string) {
   const localDir = join(baseDir, '.local');
   const tasksDir = join(localDir, 'tasks');
   const lessonsDir = join(localDir, 'lessons');
+  const errorsDir = join(localDir, 'errors');
 
   return {
     rootDir: baseDir,
     localDir,
     tasksDir,
     lessonsDir,
+    errorsDir,
   };
 }
 
@@ -61,5 +63,6 @@ export async function ensureLocalDirs(rootDir?: string) {
   await ensureRealDirectory(paths.localDir, canonicalRoot);
   await ensureRealDirectory(paths.tasksDir, canonicalRoot);
   await ensureRealDirectory(paths.lessonsDir, canonicalRoot);
+  await ensureRealDirectory(paths.errorsDir, canonicalRoot);
   return paths;
 }

@@ -36,7 +36,7 @@ export async function POST(request: Request, context: GenerateRouteContext) {
     return NextResponse.json(generateLessonResponseSchema.parse(result));
   } catch (error) {
     if (error instanceof GenerationError) {
-      return jsonError(error.message, error.status, error.code);
+      return jsonError(error.message, error.status, error.code, error.diagnosticsPath);
     }
     return jsonError('Lesson generation failed.', 502, 'GENERATION_FAILED');
   }

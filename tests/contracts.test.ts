@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { taskFileInputSchema } from '@/lib/contracts.ts';
+import { generationErrorResponseSchema } from '@/lib/generation-contracts.ts';
 import { storedTaskSchema } from '@/lib/server/task-schema.ts';
 
 const canonicalTask = {
@@ -67,4 +68,14 @@ test('stored task schema parses the exact version 2 contract', () => {
   };
 
   assert.deepEqual(storedTaskSchema.parse(task), task);
+});
+
+test('generation errors may identify their local diagnostic artifact', () => {
+  const payload = {
+    error: 'Generated lesson is invalid.',
+    code: 'GENERATION_INVALID',
+    errorPath: '.local/errors/lesson/attempt/error.json',
+  };
+
+  assert.deepEqual(generationErrorResponseSchema.parse(payload), payload);
 });

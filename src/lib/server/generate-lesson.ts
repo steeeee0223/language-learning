@@ -5,6 +5,7 @@ import {
 } from './codex-lesson-generator';
 import { getCodexStatus } from './codex-status';
 import { GenerationError } from './generation-errors';
+import { writeGenerationErrorLog, type GenerationStage } from './generation-error-log';
 import { buildLessonPrompt } from './lesson-prompt';
 import { validateLessonMdx } from './lesson-validator';
 import { lessonExists, writeLessonOnce } from './lesson-writer';
@@ -75,6 +76,8 @@ export async function generateLesson(
   let codexVersion: string | undefined;
   let requestedModel: string | undefined;
   let pendingRecorded = false;
+  let generatedContent: string | undefined;
+  let stage: GenerationStage = 'preflight';
   const updateGeneration = dependencies.updateGeneration ?? updateTaskGeneration;
 
   try {
@@ -93,6 +96,7 @@ export async function generateLesson(
     }
 
     requestedModel = resolveModelPreset(input.modelPreset);
+    stage = 'status';
     const status = await (dependencies.getStatus ?? getCodexStatus)();
     if (status.status === 'not-installed') {
       throw new GenerationError('CODEX_NOT_INSTALLED', 'The local Codex runtime is unavailable.');
@@ -103,6 +107,7 @@ export async function generateLesson(
     codexVersion = status.version;
     startedAt = new Date().toISOString();
 
+    stage = 'metadata';
     await updateGeneration(
       input.slug,
       {
@@ -122,14 +127,18 @@ export async function generateLesson(
     const generationSignal = input.signal
       ? AbortSignal.any([input.signal, timeoutSignal])
       : timeoutSignal;
+    stage = 'generation';
     const content = await generateUntilAbort(generator, {
       prompt: buildLessonPrompt(task),
       model: requestedModel,
       signal: generationSignal,
     });
+    generatedContent = content;
     throwIfGenerationAborted(generationSignal);
+    stage = 'validation';
     await validateLessonMdx(content, task);
     throwIfGenerationAborted(generationSignal);
+    stage = 'write';
     const result = await writeLessonOnce({ rootDir: dataRoot, slug: input.slug, content });
 
     try {
@@ -156,6 +165,18 @@ export async function generateLesson(
       cause instanceof GenerationError
         ? cause
         : new GenerationError('GENERATION_FAILED', 'Codex could not generate the lesson.', { cause });
+
+    error.diagnosticsPath = await writeGenerationErrorLog({
+      rootDir: dataRoot,
+      taskSlug: input.slug,
+      error,
+      stage,
+      generatedContent,
+      modelPreset: input.modelPreset,
+      requestedModel,
+      codexVersion,
+      startedAt,
+    }).catch(() => undefined);
 
     if (task && startedAt && pendingRecorded) {
       await updateGeneration(

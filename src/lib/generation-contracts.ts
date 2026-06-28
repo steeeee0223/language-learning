@@ -42,10 +42,12 @@ export const generationErrorCodeSchema = z.enum(generationErrorCodes);
 export const generationErrorResponseSchema = z.strictObject({
   error: z.string(),
   code: generationErrorCodeSchema,
+  errorPath: z.string().startsWith('.local/errors/').optional(),
 });
 export const apiErrorResponseSchema = z.strictObject({
   error: z.string(),
   code: generationErrorCodeSchema.optional(),
+  errorPath: z.string().startsWith('.local/errors/').optional(),
 });
 
 export type ModelPreset = z.infer<typeof modelPresetSchema>;

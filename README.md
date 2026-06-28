@@ -66,9 +66,10 @@ Generated local artifacts are intentionally gitignored:
 .local/
   tasks/
   lessons/
+  errors/
 ```
 
-`.local/tasks` contains local task JSON, and `.local/lessons` contains generated lesson MDX. Codex credentials are not stored under `.local`.
+`.local/tasks` contains local task JSON, and `.local/lessons` contains generated lesson MDX. A failed generation with no returned content is written to `.local/errors/<task-id>.json`. When Codex returns rejected content, the attempt is written to `.local/errors/<task-id>/<attempt>/` with `error.json` and `generated.mdx`. Codex credentials are not stored under `.local`.
 
 For tests or isolated local runs, set `LOCAL_DATA_ROOT` to another directory.
 
