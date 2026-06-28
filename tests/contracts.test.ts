@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { taskFileInputSchema } from '@/lib/contracts.ts';
+import { storedTaskSchema } from '@/lib/server/task-schema.ts';
 
 const canonicalTask = {
   video: {
@@ -45,4 +46,25 @@ test('empty CEFR levels and malformed transcript segments fail', () => {
 
 test('unknown object keys fail', () => {
   assert.equal(taskFileInputSchema.safeParse({ ...canonicalTask, unexpected: true }).success, false);
+});
+
+test('stored task schema parses the exact version 2 contract', () => {
+  const task = {
+    schemaVersion: 2,
+    createdAt: '2026-06-27T08:00:00.000Z',
+    ...canonicalTask,
+    output: {
+      format: 'mdx',
+      path: '.local/lessons/lesson.mdx',
+    },
+    instructions: {
+      requiredSections: ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'],
+    },
+    generation: {
+      status: 'pending',
+      skillVersion: '1',
+    },
+  };
+
+  assert.deepEqual(storedTaskSchema.parse(task), task);
 });

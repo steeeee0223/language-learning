@@ -3,6 +3,7 @@ import { open, readFile, readdir, realpath, stat, type FileHandle } from 'node:f
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { ensureLocalDirs } from './local-paths.ts';
+import { storedTaskSchema } from './task-schema.ts';
 
 const LESSON_SLUG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const LESSON_EXTENSIONS = ['.mdx', '.md'] as const;
@@ -63,15 +64,9 @@ function lessonTitle(slug: string, content: string) {
 
 async function readGeneratedAt(tasksDir: string, slug: string, fallback: string) {
   try {
-    const task = JSON.parse(await readFile(join(tasksDir, `${slug}.json`), 'utf8')) as unknown;
-    if (
-      task &&
-      typeof task === 'object' &&
-      'createdAt' in task &&
-      typeof task.createdAt === 'string' &&
-      !Number.isNaN(Date.parse(task.createdAt))
-    ) {
-      return task.createdAt;
+    const parsed = storedTaskSchema.safeParse(JSON.parse(await readFile(join(tasksDir, `${slug}.json`), 'utf8')));
+    if (parsed.success) {
+      return parsed.data.createdAt;
     }
   } catch (error) {
     if (!isNotFoundError(error) && !(error instanceof SyntaxError)) {

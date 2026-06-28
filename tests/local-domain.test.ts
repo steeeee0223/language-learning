@@ -22,7 +22,7 @@ test('parseYouTubeVideoId rejects non-YouTube and malformed inputs', () => {
   assert.throws(() => parseYouTubeVideoId('https://www.youtube.com/watch?v=too-short'), /video ID/);
 });
 
-test('buildTaskFile writes the local task contract and returns paths plus command', async () => {
+test('buildTaskFile writes the versioned local task contract and returns its slug and paths', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-task-'));
 
   const result = await buildTaskFile({
@@ -43,21 +43,16 @@ test('buildTaskFile writes the local task contract and returns paths plus comman
     },
   });
 
+  assert.equal(result.taskSlug, '2026-06-27-how-to-say-hello-bonjour');
   assert.equal(result.taskPath, '.local/tasks/2026-06-27-how-to-say-hello-bonjour.json');
   assert.equal(result.outputPath, '.local/lessons/2026-06-27-how-to-say-hello-bonjour.mdx');
-  assert.match(result.suggestedCommand, /codex "Generate the lesson MDX from \.local\/tasks\/2026-06-27-how-to-say-hello-bonjour\.json"/);
 
   const task = JSON.parse(await readFile(join(rootDir, result.taskPath), 'utf8'));
-  assert.equal(task.schemaVersion, 1);
+  assert.equal(task.schemaVersion, 2);
   assert.deepEqual(task.learningSettings.cefrLevels, ['A2', 'B1']);
   assert.equal(task.output.path, result.outputPath);
-  assert.deepEqual(task.instructions.requiredSections, [
-    'metadata',
-    'sentence-by-sentence translation',
-    'vocabulary by CEFR level',
-    'grammar by CEFR level',
-    'spoken usage',
-  ]);
+  assert.deepEqual(task.instructions.requiredSections, ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage']);
+  assert.deepEqual(task.generation, { status: 'pending', skillVersion: '1' });
 });
 
 test('lesson helpers support MDX precedence, legacy markdown, and path traversal protection', async () => {

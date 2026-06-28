@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server.js';
 
 import { taskFileInputSchema } from '../../../lib/contracts.ts';
+import { taskCreationResponseSchema } from '../../../lib/generation-contracts.ts';
 import { getErrorMessage, jsonError } from '../../../lib/server/http.ts';
 import { buildTaskFile } from '../../../lib/server/tasks.ts';
 
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
       return jsonError('Invalid task payload.');
     }
 
-    return NextResponse.json(await buildTaskFile(payload.data));
+    return NextResponse.json(taskCreationResponseSchema.parse(await buildTaskFile(payload.data)));
   } catch (error) {
     return jsonError(getErrorMessage(error));
   }
