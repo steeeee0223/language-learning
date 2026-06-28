@@ -23,7 +23,7 @@ This replaces the manual `codex "Generate the lesson MDX from ..."` handoff whil
 - Background jobs, cross-device synchronization, or recovery of in-flight work after the local server exits.
 - Arbitrary model IDs, automatic overwrite, or regeneration of an existing lesson.
 - Shell-based modification or network research by the generation agent. The SDK runtime may still perform read-only inspection while loading the repository skill.
-- Component unit tests, skill contract tests, API route tests, or broad testing of non-critical logic in this MVP.
+- Active component unit tests, skill contract tests, API route tests, or broad testing of non-critical logic in this MVP. Deferred unit and API behavior may be recorded as skipped test descriptions.
 - End-to-end automation; it is intentionally deferred to a later phase.
 
 ## Core Decisions
@@ -256,7 +256,9 @@ Testing is deliberately narrow. The MVP adds focused service-level tests only fo
 - The generation coordinator, using a fake `CodexLessonGenerator`, does not write invalid output and prevents duplicate concurrent generation.
 - The lesson writer refuses overwrite and leaves no final lesson when atomic persistence fails.
 
-The MVP does not add component unit tests, skill contract tests, API tests, snapshot tests, or tests for display-only and other non-critical logic. Normal test commands never invoke Codex or consume account usage.
+Deferred unit-test and API-route behavior is recorded as executable mechanism documentation. Relevant test files may contain suites with precise `describe` and `it.skip("expected behavior")` descriptions, but no placeholder assertions, fake passing bodies, fixtures, mocks, or implementation. These skipped descriptions cover intended component states, skill contract rules, non-critical service behavior, Codex status responses, generation-route validation, typed errors, conflicts, and success responses so future work has a concrete testing backlog next to the code.
+
+Browser end-to-end test skeletons are not added in the MVP. Those require broader environment decisions and will be designed when their implementation phase begins. Normal test commands never invoke Codex or consume account usage.
 
 Real-account verification is a documented manual checklist, not an automated test:
 
@@ -292,4 +294,5 @@ No new AI credential is added to `.env.example`.
 - Failed generation leaves a reusable task and no partial lesson.
 - The generation prompt explicitly invokes the checked-in `$generating-lesson` skill.
 - All object and API schema validation uses Zod v4.
+- Deferred unit and API behavior is documented with explicit `it.skip` descriptions and is visibly reported as skipped by the test runner.
 - The standard test suite never invokes a live model or consumes Codex usage.
