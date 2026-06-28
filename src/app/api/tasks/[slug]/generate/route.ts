@@ -1,0 +1,43 @@
+import { NextResponse } from 'next/server.js';
+import { z } from 'zod';
+
+import {
+  generateLessonRequestSchema,
+  generateLessonResponseSchema,
+  localSlugSchema,
+} from '../../../../../lib/generation-contracts.ts';
+import { generateLesson } from '../../../../../lib/server/generate-lesson.ts';
+import { GenerationError } from '../../../../../lib/server/generation-errors.ts';
+import { jsonError } from '../../../../../lib/server/http.ts';
+
+export const runtime = 'nodejs';
+
+const paramsSchema = z.strictObject({ slug: localSlugSchema });
+
+type GenerateRouteContext = {
+  params: Promise<unknown>;
+};
+
+export async function POST(request: Request, context: GenerateRouteContext) {
+  try {
+    const params = paramsSchema.safeParse(await context.params);
+    const payload = generateLessonRequestSchema.safeParse(
+      await request.json().catch(() => null),
+    );
+    if (!params.success || !payload.success) {
+      return jsonError('Invalid generation request.');
+    }
+
+    const result = await generateLesson({
+      slug: params.data.slug,
+      modelPreset: payload.data.modelPreset,
+      signal: request.signal,
+    });
+    return NextResponse.json(generateLessonResponseSchema.parse(result));
+  } catch (error) {
+    if (error instanceof GenerationError) {
+      return jsonError(error.message, error.status, error.code);
+    }
+    return jsonError('Codex could not generate the lesson.', 500, 'GENERATION_FAILED');
+  }
+}
