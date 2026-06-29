@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 import { YouTubeEmbed } from '@/components/youtube-embed';
 import type { CefrLevel, TargetLanguage } from '@/lib/contracts';
@@ -15,6 +15,7 @@ import {
 
 type LessonProps = {
   content: LessonContent;
+  intro?: ReactNode;
 };
 
 type ExamplesProps = {
@@ -80,7 +81,7 @@ function GrammarSection({
   );
 }
 
-export function Lesson({ content }: LessonProps) {
+export function Lesson({ content, intro }: LessonProps) {
   const language = content.lesson.targetLanguage;
   const labels = lessonLabels[language];
   const sectionLabels = lessonSectionLabels[language];
@@ -90,6 +91,7 @@ export function Lesson({ content }: LessonProps) {
   return (
     <article>
       <h1 id="lesson-title">{content.video.translatedTitle}</h1>
+      {intro}
       <YouTubeEmbed videoId={content.video.id} title={content.video.title} />
 
       <section aria-labelledby={lessonSectionIds.metadata}>
