@@ -7,55 +7,56 @@ import {
   type TargetLanguage,
 } from '@/lib/contracts.ts';
 
-const text = z.string().catch('');
-
-const blankTranscript = { time: '', source: '', translation: '' };
-const blankExample = { source: '', translation: '' };
-const blankVocab = { source: '', translation: '', usage: '' };
-const blankGrammar = { title: '', explanation: '', examples: [] };
-const blankSpokenUsage = { title: '', explanation: '', examples: [] };
+const text = z.string().catch(() => '');
 
 const transcriptSchema = z
   .object({ time: text, source: text, translation: text })
-  .catch(blankTranscript);
-const exampleSchema = z.object({ source: text, translation: text }).catch(blankExample);
+  .catch(() => ({ time: '', source: '', translation: '' }));
+const exampleSchema = z
+  .object({ source: text, translation: text })
+  .catch(() => ({ source: '', translation: '' }));
 const vocabItemSchema = z
   .object({ source: text, translation: text, usage: text })
-  .catch(blankVocab);
+  .catch(() => ({ source: '', translation: '', usage: '' }));
 const grammarItemSchema = z
   .object({
     title: text,
     explanation: text,
-    examples: z.array(exampleSchema).catch([]),
+    examples: z.array(exampleSchema).catch(() => []),
   })
-  .catch(blankGrammar);
+  .catch(() => ({ title: '', explanation: '', examples: [] }));
 const spokenUsageItemSchema = z
   .object({
     title: text,
     explanation: text,
-    examples: z.array(exampleSchema).catch([]),
+    examples: z.array(exampleSchema).catch(() => []),
   })
-  .catch(blankSpokenUsage);
+  .catch(() => ({ title: '', explanation: '', examples: [] }));
 
 export const lessonSchema = z.object({
-  schemaVersion: z.literal(1).catch(1),
+  schemaVersion: z.literal(1).catch(() => 1 as const),
   video: z.object({ id: text, title: text, translatedTitle: text }),
   lesson: z.object({
-    targetLanguage: targetLanguageSchema,
-    cefrLevels: z.array(cefrLevelSchema).catch([]),
+    targetLanguage: targetLanguageSchema.catch(() => 'en' as const),
+    cefrLevels: z.array(cefrLevelSchema).catch(() => []),
     transcriptSource: text,
     focus: text,
   }),
-  transcripts: z.array(transcriptSchema).catch([]),
-  vocabs: z.partialRecord(cefrLevelSchema, z.array(vocabItemSchema).catch([])).catch({}),
-  grammars: z.partialRecord(cefrLevelSchema, z.array(grammarItemSchema).catch([])).catch({}),
-  spokenUsage: z.array(spokenUsageItemSchema).catch([]),
+  transcripts: z.array(transcriptSchema).catch(() => []),
+  vocabs: z
+    .partialRecord(cefrLevelSchema, z.array(vocabItemSchema).catch(() => []))
+    .catch(() => ({})),
+  grammars: z
+    .partialRecord(cefrLevelSchema, z.array(grammarItemSchema).catch(() => []))
+    .catch(() => ({})),
+  spokenUsage: z.array(spokenUsageItemSchema).catch(() => []),
 });
 
 export type LessonContent = z.infer<typeof lessonSchema>;
 
 export function parseLessonValue(value: unknown, fallback: LessonContent): LessonContent {
   const parsed = lessonSchema.catch(fallback).parse(value);
+  const targetLanguage = targetLanguageSchema.safeParse(readTargetLanguage(value));
 
   return lessonSchema.parse({
     ...parsed,
@@ -65,7 +66,9 @@ export function parseLessonValue(value: unknown, fallback: LessonContent): Lesso
       translatedTitle: parsed.video.translatedTitle || fallback.video.translatedTitle,
     },
     lesson: {
-      targetLanguage: parsed.lesson.targetLanguage,
+      targetLanguage: targetLanguage.success
+        ? targetLanguage.data
+        : fallback.lesson.targetLanguage,
       cefrLevels:
         parsed.lesson.cefrLevels.length > 0
           ? parsed.lesson.cefrLevels
@@ -75,6 +78,17 @@ export function parseLessonValue(value: unknown, fallback: LessonContent): Lesso
     },
     transcripts: parsed.transcripts.length > 0 ? parsed.transcripts : fallback.transcripts,
   });
+}
+
+function readTargetLanguage(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || !('lesson' in value)) return undefined;
+
+  const lesson = value.lesson;
+  if (typeof lesson !== 'object' || lesson === null || !('targetLanguage' in lesson)) {
+    return undefined;
+  }
+
+  return lesson.targetLanguage;
 }
 
 export function createFallbackLesson(input: {
@@ -89,11 +103,11 @@ export function createFallbackLesson(input: {
     video: { ...input.video, translatedTitle: input.video.title },
     lesson: {
       targetLanguage: input.targetLanguage,
-      cefrLevels: input.cefrLevels,
+      cefrLevels: [...input.cefrLevels],
       transcriptSource: input.transcriptSource,
       focus: '',
     },
-    transcripts: input.transcripts,
+    transcripts: input.transcripts.map((transcript) => ({ ...transcript })),
     vocabs: {},
     grammars: {},
     spokenUsage: [],
