@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { learningSettingsSchema, normalizedTranscriptSchema, videoMetadataSchema } from '@/lib/contracts';
 import { generationErrorCodeSchema, modelPresetSchema } from '@/lib/generation-contracts';
 
-export const TASK_SCHEMA_VERSION = 2 as const;
-export const LESSON_SKILL_VERSION = '2' as const;
+export const TASK_SCHEMA_VERSION = 3 as const;
+export const LESSON_SKILL_VERSION = '3' as const;
 export const requiredLessonSections = ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'] as const;
 
 export const generationMetadataSchema = z.strictObject({
@@ -25,8 +25,8 @@ export const storedTaskSchema = z.strictObject({
   transcript: normalizedTranscriptSchema,
   learningSettings: learningSettingsSchema,
   output: z.strictObject({
-    format: z.literal('mdx'),
-    path: z.string().regex(/^\.local\/lessons\/[A-Za-z0-9][A-Za-z0-9_-]*\.mdx$/),
+    format: z.literal('json'),
+    path: z.string().regex(/^\.local\/lessons\/[A-Za-z0-9][A-Za-z0-9_-]*\.json$/),
   }),
   instructions: z.strictObject({
     requiredSections: z.tuple([

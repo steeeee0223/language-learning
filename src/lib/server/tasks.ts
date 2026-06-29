@@ -36,7 +36,7 @@ export async function buildTaskFile(input: BuildTaskFileInput): Promise<BuildTas
   const datePrefix = now.toISOString().slice(0, 10);
   const basename = `${datePrefix}-${slugifyTitle(input.video.title, input.video.id)}`;
   const taskPath = `.local/tasks/${basename}.json`;
-  const outputPath = `.local/lessons/${basename}.mdx`;
+  const outputPath = `.local/lessons/${basename}.json`;
   const releaseTaskOperation = tryAcquireTaskOperation(paths.rootDir, basename);
   if (!releaseTaskOperation) {
     throw new Error('This task is currently being generated.');
@@ -50,7 +50,7 @@ export async function buildTaskFile(input: BuildTaskFileInput): Promise<BuildTas
       transcript: input.transcript,
       learningSettings: input.learningSettings,
       output: {
-        format: 'mdx',
+        format: 'json',
         path: outputPath,
       },
       instructions: {

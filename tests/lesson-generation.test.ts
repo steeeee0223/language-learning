@@ -32,7 +32,7 @@ async function createStoredTaskFixture(options?: {
   const rootDir = await mkdtemp(join(tmpdir(), 'generation-task-'));
   const { tasksDir } = await ensureLocalDirs(rootDir);
   const storedTask = storedTaskSchema.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     createdAt: '2026-06-28T00:00:00.000Z',
     video: {
       url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
@@ -44,11 +44,11 @@ async function createStoredTaskFixture(options?: {
       segments: [{ text: 'Here we are at the zoo.', start: 0, duration: 1 }],
     },
     learningSettings: { targetLanguage: 'zh', cefrLevels: ['A2', 'B1'] },
-    output: { format: 'mdx', path: options?.outputPath ?? '.local/lessons/lesson.mdx' },
+    output: { format: 'json', path: options?.outputPath ?? '.local/lessons/lesson.json' },
     instructions: {
       requiredSections: ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'],
     },
-    generation: options?.generation ?? { status: 'pending', skillVersion: '1' },
+    generation: options?.generation ?? { status: 'pending', skillVersion: '3' },
   });
   await writeFile(join(tasksDir, 'lesson.json'), `${JSON.stringify(storedTask, null, 2)}\n`, 'utf8');
   return rootDir;
@@ -251,7 +251,7 @@ describe('lesson persistence and generation coordination', () => {
     assert.equal(details.stage, 'validation');
     assert.equal(details.generatedOutputPath, `.local/errors/lesson/${attempts[0]}/generated.mdx`);
     assert.equal(await readFile(join(attemptDir, 'generated.mdx'), 'utf8'), '# invalid');
-    assert.equal((await readTask('lesson', rootDir)).generation.skillVersion, '2');
+    assert.equal((await readTask('lesson', rootDir)).generation.skillVersion, '3');
   });
 
   it('writes error details when generation fails before returning content', async () => {
@@ -625,7 +625,7 @@ describe('lesson persistence and generation coordination', () => {
 
   it('rejects a task whose declared output path does not match its slug', async () => {
     const rootDir = await createStoredTaskFixture({
-      outputPath: '.local/lessons/a-different-lesson.mdx',
+      outputPath: '.local/lessons/a-different-lesson.json',
     });
     let calls = 0;
 

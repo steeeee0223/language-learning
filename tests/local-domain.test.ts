@@ -45,14 +45,14 @@ test('buildTaskFile writes the versioned local task contract and returns its slu
 
   assert.equal(result.taskSlug, '2026-06-27-how-to-say-hello-bonjour');
   assert.equal(result.taskPath, '.local/tasks/2026-06-27-how-to-say-hello-bonjour.json');
-  assert.equal(result.outputPath, '.local/lessons/2026-06-27-how-to-say-hello-bonjour.mdx');
+  assert.equal(result.outputPath, '.local/lessons/2026-06-27-how-to-say-hello-bonjour.json');
 
   const task = JSON.parse(await readFile(join(rootDir, result.taskPath), 'utf8'));
-  assert.equal(task.schemaVersion, 2);
+  assert.equal(task.schemaVersion, 3);
   assert.deepEqual(task.learningSettings.cefrLevels, ['A2', 'B1']);
-  assert.equal(task.output.path, result.outputPath);
+  assert.deepEqual(task.output, { format: 'json', path: result.outputPath });
   assert.deepEqual(task.instructions.requiredSections, ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage']);
-  assert.deepEqual(task.generation, { status: 'pending', skillVersion: '2' });
+  assert.deepEqual(task.generation, { status: 'pending', skillVersion: '3' });
 });
 
 test('lesson helpers support MDX precedence, legacy markdown, and path traversal protection', async () => {
