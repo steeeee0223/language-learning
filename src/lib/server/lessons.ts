@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open, readFile, readdir, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { open, readFile, readdir, realpath, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { lessonSchema, type LessonContent } from '@/lib/lesson-content.ts';
@@ -46,7 +46,7 @@ function lessonTitle(slug: string, content: LessonContent) {
   const translatedTitle = content.video.translatedTitle.trim();
   const date = lessonDateFromSlug(slug);
 
-  if (translatedTitle && date) {
+  if (translatedTitle && date && !translatedTitle.startsWith(date)) {
     return `${date} ${translatedTitle}`;
   }
 
@@ -119,18 +119,29 @@ export async function listLessons(options: LessonOptions = {}): Promise<LessonLi
   const lessons = await Promise.all(
     lessonEntries.map(async ({ name, slug }) => {
       const absolutePath = join(paths.lessonsDir, name);
-      const [meta, text] = await Promise.all([stat(absolutePath), readFile(absolutePath, 'utf8')]);
-      const content = parseLesson(text);
-      const modifiedAt = meta.mtime.toISOString();
+      let candidateFile: FileHandle | undefined;
 
-      return {
-        slug,
-        title: lessonTitle(slug, content),
-        filename: name,
-        path: `.local/lessons/${name}`,
-        modifiedAt,
-        generatedAt: await readGeneratedAt(paths.tasksDir, slug, modifiedAt),
-      };
+      try {
+        candidateFile = await open(absolutePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+        const meta = await candidateFile.stat();
+        if (!meta.isFile()) {
+          throw new Error('Lesson path is not a regular file.');
+        }
+
+        const content = parseLesson(await candidateFile.readFile('utf8'));
+        const modifiedAt = meta.mtime.toISOString();
+
+        return {
+          slug,
+          title: lessonTitle(slug, content),
+          filename: name,
+          path: `.local/lessons/${name}`,
+          modifiedAt,
+          generatedAt: await readGeneratedAt(paths.tasksDir, slug, modifiedAt),
+        };
+      } finally {
+        await candidateFile?.close();
+      }
     }),
   );
 

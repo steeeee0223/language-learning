@@ -74,7 +74,7 @@ test('buildTaskFile writes the versioned local task contract and returns its slu
   assert.deepEqual(task.generation, { status: 'pending', skillVersion: '3' });
 });
 
-test('lesson helpers list and read only schema-valid JSON lessons', async () => {
+test('lesson helpers list and read only regular JSON lesson files', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-lessons-'));
   await writeLessonFixture(join(rootDir, 'outside.json'), { translatedTitle: 'Outside' });
   await writeFile(join(rootDir, '.local-lessons-placeholder'), '');
@@ -103,6 +103,26 @@ test('lesson helpers list and read only schema-valid JSON lessons', async () => 
     return error instanceof Error && 'code' in error && error.code === 'ENOENT';
   });
   await assert.rejects(() => readLesson({ rootDir, slug: '../outside' }), /Invalid lesson slug/);
+});
+
+test('listLessons does not duplicate a date already present in the translated title', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-lesson-date-title-'));
+  const lessonsDir = join(rootDir, '.local', 'lessons');
+  await mkdir(lessonsDir, { recursive: true });
+  await writeLessonFixture(join(lessonsDir, '2026-06-27-equal.json'), {
+    translatedTitle: '2026-06-27',
+  });
+  await writeLessonFixture(join(lessonsDir, '2026-06-28-prefixed.json'), {
+    translatedTitle: '2026-06-28 Existing title',
+  });
+
+  const lessons = await listLessons({ rootDir });
+
+  assert.equal(lessons.find((lesson) => lesson.slug === '2026-06-27-equal')?.title, '2026-06-27');
+  assert.equal(
+    lessons.find((lesson) => lesson.slug === '2026-06-28-prefixed')?.title,
+    '2026-06-28 Existing title',
+  );
 });
 
 test('listLessons filters invalid slugs, uses title fallbacks, and deterministically sorts equal mtimes', async () => {
@@ -163,6 +183,15 @@ test('readLesson rejects malformed JSON', async () => {
   await writeFile(join(lessonsDir, 'malformed.json'), '{not json');
 
   await assert.rejects(() => readLesson({ rootDir, slug: 'malformed' }), SyntaxError);
+});
+
+test('listLessons rejects a syntactically invalid JSON lesson', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-lesson-malformed-list-'));
+  const lessonsDir = join(rootDir, '.local', 'lessons');
+  await mkdir(lessonsDir, { recursive: true });
+  await writeFile(join(lessonsDir, 'malformed.json'), '{not json');
+
+  await assert.rejects(() => listLessons({ rootDir }), SyntaxError);
 });
 
 test('readLesson rejects a JSON symlink instead of falling back to Markdown', async (context) => {
