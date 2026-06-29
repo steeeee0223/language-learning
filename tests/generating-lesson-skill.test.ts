@@ -17,7 +17,7 @@ describe('generating-lesson skill contract', () => {
   });
 
   it('increments the task metadata version for the new lesson contract', () => {
-    assert.equal(LESSON_SKILL_VERSION, '2');
+    assert.equal(LESSON_SKILL_VERSION, '3');
   });
 
   it('requires the contract and canonical example to be read before generation', async () => {

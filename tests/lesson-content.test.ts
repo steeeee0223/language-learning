@@ -19,7 +19,7 @@ const fallback = createFallbackLesson({
 });
 
 const task = storedTaskSchema.parse({
-  schemaVersion: 2,
+  schemaVersion: 3,
   createdAt: '2026-06-30T00:00:00.000Z',
   video: {
     url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
@@ -35,11 +35,11 @@ const task = storedTaskSchema.parse({
     ],
   },
   learningSettings: { targetLanguage: 'zh', cefrLevels: ['B1', 'A2'] },
-  output: { format: 'mdx', path: '.local/lessons/lesson.mdx' },
+  output: { format: 'json', path: '.local/lessons/lesson.json' },
   instructions: {
     requiredSections: ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'],
   },
-  generation: { status: 'pending', skillVersion: '2' },
+  generation: { status: 'pending', skillVersion: '3' },
 });
 
 describe('formatTimestamp', () => {

@@ -49,21 +49,21 @@ test('unknown object keys fail', () => {
   assert.equal(taskFileInputSchema.safeParse({ ...canonicalTask, unexpected: true }).success, false);
 });
 
-test('stored task schema parses the exact version 2 contract', () => {
+test('stored task schema parses the exact version 3 contract', () => {
   const task = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     createdAt: '2026-06-27T08:00:00.000Z',
     ...canonicalTask,
     output: {
-      format: 'mdx',
-      path: '.local/lessons/lesson.mdx',
+      format: 'json',
+      path: '.local/lessons/lesson.json',
     },
     instructions: {
       requiredSections: ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'],
     },
     generation: {
       status: 'pending',
-      skillVersion: '1',
+      skillVersion: '3',
     },
   };
 
