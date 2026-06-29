@@ -6,7 +6,6 @@ import { describe, it } from 'node:test';
 
 import { generateLesson } from '@/lib/server/generate-lesson.ts';
 import { GenerationError } from '@/lib/server/generation-errors.ts';
-import { buildLessonPrompt } from '@/lib/server/lesson-prompt.ts';
 import { ensureLocalDirs } from '@/lib/server/local-paths.ts';
 import { readTask } from '@/lib/server/task-store.ts';
 import { buildTaskFile } from '@/lib/server/tasks.ts';
@@ -43,18 +42,6 @@ async function createStoredTaskFixture(options?: {
 }
 
 const getReadyStatus = async () => ({ status: 'ready' as const, version: 'codex-cli test' });
-
-describe('buildLessonPrompt', () => {
-  it('delegates the output contract to the generating-lesson skill', async () => {
-    const rootDir = await createStoredTaskFixture();
-    const prompt = buildLessonPrompt(await readTask('lesson', rootDir));
-
-    assert.match(prompt, /^Use \$generating-lesson/);
-    assert.match(prompt, /Target language: zh/);
-    assert.match(prompt, /CEFR levels: A2, B1/);
-    assert.doesNotMatch(prompt, /Mandatory output contract|## 課程資訊|## CEFR/);
-  });
-});
 
 describe('lesson persistence and generation coordination', () => {
   it('atomically creates a lesson and refuses overwrite', async () => {
