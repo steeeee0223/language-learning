@@ -6,6 +6,8 @@ import {
   type CefrLevel,
   type TargetLanguage,
 } from '@/lib/contracts.ts';
+import { orderCefrLevels } from '@/lib/lesson-sections.ts';
+import type { StoredTask } from '@/lib/server/task-schema.ts';
 
 const text = z.string().catch(() => '');
 
@@ -53,6 +55,77 @@ export const lessonSchema = z.object({
 });
 
 export type LessonContent = z.infer<typeof lessonSchema>;
+
+export function formatTimestamp(seconds: number) {
+  const wholeSeconds = Math.floor(seconds);
+  const minutes = Math.floor(wholeSeconds / 60);
+  const remainingSeconds = wholeSeconds % 60;
+
+  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+export function parseGeneratedLesson(raw: string, task: StoredTask): LessonContent {
+  const cefrLevels = orderCefrLevels(task.learningSettings.cefrLevels);
+  const fallback = createFallbackLesson({
+    video: { id: task.video.id, title: task.video.title },
+    targetLanguage: task.learningSettings.targetLanguage,
+    cefrLevels,
+    transcriptSource: task.transcript.source,
+    transcripts: task.transcript.segments.map((segment) => ({
+      time: formatTimestamp(segment.start),
+      source: segment.text,
+      translation: segment.text,
+    })),
+  });
+
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+
+  const parsed = parseLessonValue(value, fallback);
+  const vocabs: LessonContent['vocabs'] = {};
+  const grammars: LessonContent['grammars'] = {};
+
+  for (const level of cefrLevels) {
+    const levelVocabs = parsed.vocabs[level];
+    const levelGrammars = parsed.grammars[level];
+
+    if (levelVocabs !== undefined) vocabs[level] = levelVocabs;
+    if (levelGrammars !== undefined) grammars[level] = levelGrammars;
+  }
+
+  return lessonSchema.parse({
+    schemaVersion: 1,
+    video: {
+      id: task.video.id,
+      title: task.video.title,
+      translatedTitle: parsed.video.translatedTitle.trim()
+        ? parsed.video.translatedTitle
+        : task.video.title,
+    },
+    lesson: {
+      targetLanguage: task.learningSettings.targetLanguage,
+      cefrLevels,
+      transcriptSource: task.transcript.source,
+      focus: parsed.lesson.focus.trim() ? parsed.lesson.focus : '',
+    },
+    transcripts: task.transcript.segments.map((segment, index) => {
+      const translation = parsed.transcripts[index]?.translation;
+
+      return {
+        time: formatTimestamp(segment.start),
+        source: segment.text,
+        translation: translation?.trim() ? translation : segment.text,
+      };
+    }),
+    vocabs,
+    grammars,
+    spokenUsage: parsed.spokenUsage,
+  });
+}
 
 export function parseLessonValue(value: unknown, fallback: LessonContent): LessonContent {
   const parsed = lessonSchema.catch(fallback).parse(value);

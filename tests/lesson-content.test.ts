@@ -3,9 +3,12 @@ import { describe, it } from 'node:test';
 
 import {
   createFallbackLesson,
+  formatTimestamp,
   lessonSchema,
+  parseGeneratedLesson,
   parseLessonValue,
 } from '@/lib/lesson-content.ts';
+import { storedTaskSchema } from '@/lib/server/task-schema.ts';
 
 const fallback = createFallbackLesson({
   video: { id: 'jNQXAC9IVRw', title: 'Me at the zoo' },
@@ -13,6 +16,151 @@ const fallback = createFallbackLesson({
   cefrLevels: ['A2', 'B1'],
   transcriptSource: 'youtube-transcript.io',
   transcripts: [{ time: '00:00', source: 'Here we are.', translation: 'Here we are.' }],
+});
+
+const task = storedTaskSchema.parse({
+  schemaVersion: 2,
+  createdAt: '2026-06-30T00:00:00.000Z',
+  video: {
+    url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+    id: 'jNQXAC9IVRw',
+    title: 'Me at the zoo',
+  },
+  transcript: {
+    source: 'youtube-transcript.io',
+    segments: [
+      { text: 'Here we are.', start: 0.9, duration: 1 },
+      { text: 'The cool thing is these guys.', start: 65.8, duration: 2 },
+      { text: 'That is pretty much all there is to say.', start: 125.2, duration: 3 },
+    ],
+  },
+  learningSettings: { targetLanguage: 'zh', cefrLevels: ['B1', 'A2'] },
+  output: { format: 'mdx', path: '.local/lessons/lesson.mdx' },
+  instructions: {
+    requiredSections: ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'],
+  },
+  generation: { status: 'pending', skillVersion: '2' },
+});
+
+describe('formatTimestamp', () => {
+  it('floors fractional seconds and formats them as mm:ss', () => {
+    assert.equal(formatTimestamp(125.9), '02:05');
+  });
+});
+
+describe('parseGeneratedLesson', () => {
+  it('returns a task-derived fallback when the generated JSON is malformed', () => {
+    assert.deepEqual(parseGeneratedLesson('{not JSON', task), {
+      schemaVersion: 1,
+      video: {
+        id: 'jNQXAC9IVRw',
+        title: 'Me at the zoo',
+        translatedTitle: 'Me at the zoo',
+      },
+      lesson: {
+        targetLanguage: 'zh',
+        cefrLevels: ['A2', 'B1'],
+        transcriptSource: 'youtube-transcript.io',
+        focus: '',
+      },
+      transcripts: [
+        { time: '00:00', source: 'Here we are.', translation: 'Here we are.' },
+        {
+          time: '01:05',
+          source: 'The cool thing is these guys.',
+          translation: 'The cool thing is these guys.',
+        },
+        {
+          time: '02:05',
+          source: 'That is pretty much all there is to say.',
+          translation: 'That is pretty much all there is to say.',
+        },
+      ],
+      vocabs: {},
+      grammars: {},
+      spokenUsage: [],
+    });
+  });
+
+  it('normalizes model content around trusted task fields', () => {
+    const spokenUsage = [
+      {
+        title: 'Here we are',
+        explanation: 'Used when arriving somewhere.',
+        examples: [{ source: 'Here we are!', translation: '我們到了！' }],
+      },
+    ];
+    const result = parseGeneratedLesson(
+      JSON.stringify({
+        schemaVersion: 1,
+        video: {
+          id: 'overridden',
+          title: 'Overridden title',
+          translatedTitle: '我在動物園',
+        },
+        lesson: {
+          targetLanguage: 'en',
+          cefrLevels: ['C2'],
+          transcriptSource: 'model-source',
+          focus: 'Everyday spoken English',
+        },
+        transcripts: [
+          { time: '99:99', source: 'Overridden source.', translation: '我們到了。' },
+          { time: '88:88', source: 'Another override.', translation: '   ' },
+          { time: '77:77', source: 'Extra source.', translation: '額外翻譯。' },
+          { time: '66:66', source: 'Ignored extra.', translation: '忽略。' },
+        ],
+        vocabs: {
+          B1: [{ source: 'cool', translation: '很棒', usage: 'informal adjective' }],
+          A2: [{ source: 'zoo', translation: '動物園', usage: 'noun' }],
+          C2: [{ source: 'unexpected', translation: '不應保留', usage: 'ignored' }],
+        },
+        grammars: {
+          B1: [{ title: 'The thing is', explanation: 'Introduces a point.', examples: [] }],
+          A2: [{ title: 'Here we are', explanation: 'Signals arrival.', examples: [] }],
+          C2: [{ title: 'Unexpected', explanation: 'Ignored.', examples: [] }],
+        },
+        spokenUsage,
+      }),
+      task,
+    );
+
+    assert.deepEqual(result.video, {
+      id: 'jNQXAC9IVRw',
+      title: 'Me at the zoo',
+      translatedTitle: '我在動物園',
+    });
+    assert.deepEqual(result.lesson, {
+      targetLanguage: 'zh',
+      cefrLevels: ['A2', 'B1'],
+      transcriptSource: 'youtube-transcript.io',
+      focus: 'Everyday spoken English',
+    });
+    assert.deepEqual(result.transcripts, [
+      { time: '00:00', source: 'Here we are.', translation: '我們到了。' },
+      {
+        time: '01:05',
+        source: 'The cool thing is these guys.',
+        translation: 'The cool thing is these guys.',
+      },
+      {
+        time: '02:05',
+        source: 'That is pretty much all there is to say.',
+        translation: '額外翻譯。',
+      },
+    ]);
+    assert.deepEqual(Object.keys(result.vocabs), ['A2', 'B1']);
+    assert.deepEqual(result.vocabs, {
+      A2: [{ source: 'zoo', translation: '動物園', usage: 'noun' }],
+      B1: [{ source: 'cool', translation: '很棒', usage: 'informal adjective' }],
+    });
+    assert.deepEqual(Object.keys(result.grammars), ['A2', 'B1']);
+    assert.deepEqual(result.grammars, {
+      A2: [{ title: 'Here we are', explanation: 'Signals arrival.', examples: [] }],
+      B1: [{ title: 'The thing is', explanation: 'Introduces a point.', examples: [] }],
+    });
+    assert.deepEqual(result.spokenUsage, spokenUsage);
+  });
 });
 
 describe('lessonSchema', () => {
