@@ -1,4 +1,5 @@
 import type { ModelPreset } from '@/lib/generation-contracts';
+import { parseGeneratedLesson } from '@/lib/lesson-content';
 import {
   OpenAICodexLessonGenerator,
   type CodexLessonGenerator,
@@ -7,7 +8,6 @@ import { getCodexStatus } from './codex-status';
 import { GenerationError } from './generation-errors';
 import { writeGenerationErrorLog, type GenerationStage } from './generation-error-log';
 import { buildLessonPrompt } from './lesson-prompt';
-import { validateLessonMdx } from './lesson-validator';
 import { lessonExists, writeLessonOnce } from './lesson-writer';
 import { canonicalizeLocalRoot } from './local-paths';
 import { resolveModelPreset } from './model-registry';
@@ -83,7 +83,7 @@ export async function generateLesson(
   try {
     task = await readTask(input.slug, dataRoot);
 
-    const expectedOutputPath = `.local/lessons/${input.slug}.mdx`;
+    const expectedOutputPath = `.local/lessons/${input.slug}.json`;
     if (task.output.path !== expectedOutputPath) {
       throw new GenerationError(
         'GENERATION_INVALID',
@@ -135,11 +135,15 @@ export async function generateLesson(
     });
     generatedContent = content;
     throwIfGenerationAborted(generationSignal);
-    stage = 'validation';
-    await validateLessonMdx(content, task);
+    const lesson = parseGeneratedLesson(content, task);
+    const normalizedContent = `${JSON.stringify(lesson, null, 2)}\n`;
     throwIfGenerationAborted(generationSignal);
     stage = 'write';
-    const result = await writeLessonOnce({ rootDir: dataRoot, slug: input.slug, content });
+    const result = await writeLessonOnce({
+      rootDir: dataRoot,
+      slug: input.slug,
+      content: normalizedContent,
+    });
 
     try {
       await updateGeneration(

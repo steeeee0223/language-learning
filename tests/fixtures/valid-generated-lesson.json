@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "video": {
+    "id": "jNQXAC9IVRw",
+    "title": "Me at the zoo",
+    "translatedTitle": "我在動物園"
+  },
+  "lesson": {
+    "targetLanguage": "zh",
+    "cefrLevels": [
+      "A2",
+      "B1"
+    ],
+    "transcriptSource": "youtube-transcript.io",
+    "focus": "動物園場景中的位置與抵達表達"
+  },
+  "transcripts": [
+    {
+      "time": "00:00",
+      "source": "Here we are at the zoo.",
+      "translation": "我們現在在動物園。"
+    }
+  ],
+  "vocabs": {
+    "A2": [
+      {
+        "source": "zoo",
+        "translation": "動物園",
+        "usage": "表示展示動物的場所。"
+      }
+    ],
+    "B1": [
+      {
+        "source": "behind",
+        "translation": "位於後方",
+        "usage": "用來描述相對位置。"
+      }
+    ]
+  },
+  "grammars": {
+    "A2": [
+      {
+        "title": "Here we are",
+        "explanation": "用來表示已抵達目前的位置。",
+        "examples": [
+          {
+            "source": "Here we are at the zoo.",
+            "translation": "我們到動物園了。"
+          }
+        ]
+      }
+    ],
+    "B1": [
+      {
+        "title": "behind me",
+        "explanation": "介系詞片語，用來描述相對位置。",
+        "examples": [
+          {
+            "source": "The elephants are behind me.",
+            "translation": "大象就在我身後。"
+          }
+        ]
+      }
+    ]
+  },
+  "spokenUsage": [
+    {
+      "title": "Here we are",
+      "explanation": "抵達某處時常用的口語表達。",
+      "examples": [
+        {
+          "source": "Here we are!",
+          "translation": "我們到了！"
+        }
+      ]
+    }
+  ]
+}

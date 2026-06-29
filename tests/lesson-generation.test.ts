@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -10,20 +10,8 @@ import { buildLessonPrompt } from '@/lib/server/lesson-prompt.ts';
 import { ensureLocalDirs } from '@/lib/server/local-paths.ts';
 import { readTask } from '@/lib/server/task-store.ts';
 import { buildTaskFile } from '@/lib/server/tasks.ts';
-import { validateLessonMdx } from '@/lib/server/lesson-validator.ts';
 import { writeLessonOnce } from '@/lib/server/lesson-writer.ts';
 import { storedTaskSchema } from '@/lib/server/task-schema.ts';
-
-const task = {
-  video: { id: 'jNQXAC9IVRw' },
-  learningSettings: { targetLanguage: 'zh' as const, cefrLevels: ['A2', 'B1'] as const },
-};
-
-function isGenerationInvalid(error: unknown) {
-  assert.ok(error instanceof GenerationError);
-  assert.equal(error.code, 'GENERATION_INVALID');
-  return true;
-}
 
 async function createStoredTaskFixture(options?: {
   outputPath?: string;
@@ -56,53 +44,6 @@ async function createStoredTaskFixture(options?: {
 
 const getReadyStatus = async () => ({ status: 'ready' as const, version: 'codex-cli test' });
 
-const canonicalLevelLesson = `<YouTubeEmbed videoId="jNQXAC9IVRw" title="Me at the zoo" />
-
-# 我在動物園
-
-## 課程資訊
-
-| 欄位 | 內容 |
-| --- | --- |
-| 影片 | Me at the zoo |
-
-## 逐句翻譯
-
-| 原文 | 繁體中文 |
-| --- | --- |
-| Here we are at the zoo. | 我們在動物園。 |
-
-## A1 詞彙
-
-| 英文 | 繁體中文 | 用法說明 |
-| --- | --- | --- |
-| zoo | 動物園 | 名詞 |
-
-## A1 文法
-
-### 1. Here we are
-
-用來表示抵達某處。
-
-## A2 詞彙
-
-| 英文 | 繁體中文 | 用法說明 |
-| --- | --- | --- |
-| behind | 後方 | 位置詞 |
-
-## A2 文法
-
-### 1. behind me
-
-用來描述相對位置。
-
-## 口語用法
-
-### 抵達時的說法
-
-口語常說「Here we are」。
-`;
-
 describe('buildLessonPrompt', () => {
   it('delegates the output contract to the generating-lesson skill', async () => {
     const rootDir = await createStoredTaskFixture();
@@ -112,96 +53,6 @@ describe('buildLessonPrompt', () => {
     assert.match(prompt, /Target language: zh/);
     assert.match(prompt, /CEFR levels: A2, B1/);
     assert.doesNotMatch(prompt, /Mandatory output contract|## 課程資訊|## CEFR/);
-  });
-});
-
-describe('validateLessonMdx', () => {
-  it('accepts one vocabulary and grammar section per CEFR level in canonical order', async () => {
-    await assert.doesNotReject(() =>
-      validateLessonMdx(canonicalLevelLesson, {
-        video: task.video,
-        learningSettings: { targetLanguage: 'zh', cefrLevels: ['A2', 'A1'] },
-      }),
-    );
-  });
-
-  it('requires the canonical table and subsection components', async () => {
-    const validationTask = {
-      video: task.video,
-      learningSettings: { targetLanguage: 'zh' as const, cefrLevels: ['A2', 'A1'] as const },
-    };
-    const withoutInfoTable = canonicalLevelLesson.replace(
-      '| 欄位 | 內容 |\n| --- | --- |\n| 影片 | Me at the zoo |',
-      '影片：Me at the zoo',
-    );
-    const withoutGrammarSubheading = canonicalLevelLesson.replace('### 1. Here we are\n\n', '');
-
-    await assert.rejects(() => validateLessonMdx(withoutInfoTable, validationTask), /table/i);
-    await assert.rejects(() => validateLessonMdx(withoutGrammarSubheading, validationTask), /H3/i);
-  });
-
-  it('accepts the canonical generated lesson', async () => {
-    const content = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
-    await assert.doesNotReject(() => validateLessonMdx(content, task));
-  });
-
-  it('rejects missing levels, code fences, and executable MDX', async () => {
-    const content = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
-    await assert.rejects(
-      () => validateLessonMdx(content.replace('## B1 詞彙', '## C1 詞彙'), task),
-      /section order/,
-    );
-    await assert.rejects(() => validateLessonMdx(`\`\`\`mdx\n${content}\n\`\`\``, task), /code fence/);
-    await assert.rejects(() => validateLessonMdx(`${content}\n\n{globalThis.process.exit()}`, task), isGenerationInvalid);
-    await assert.rejects(() => validateLessonMdx(`${content}\n\n<Broken`, task), isGenerationInvalid);
-  });
-
-  it('rejects an incorrect embed or required section order', async () => {
-    const content = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
-    await assert.rejects(() => validateLessonMdx(content.replace('jNQXAC9IVRw', 'abcdefghijk'), task), /videoId/);
-    const swapped = content
-      .replace('## 逐句翻譯', '## __TEMP__')
-      .replace('## 口語用法', '## 逐句翻譯')
-      .replace('## __TEMP__', '## 口語用法');
-    await assert.rejects(
-      () => validateLessonMdx(swapped, task),
-      /section order/,
-    );
-  });
-
-  it('rejects headings nested below non-root nodes', async () => {
-    const content = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
-    await assert.rejects(() => validateLessonMdx(`${content}\n\n> # hidden second H1`, task), /top-level/);
-    await assert.rejects(() => validateLessonMdx(`${content}\n\n> ## hidden extra section`, task), /top-level/);
-  });
-
-  it('rejects empty sections and CEFR level subsections', async () => {
-    const shell = `<YouTubeEmbed videoId="jNQXAC9IVRw" title="Me at the zoo" />
-
-# 我在動物園
-
-## 課程資訊
-
-## 逐句翻譯
-
-## A2 詞彙
-
-## A2 文法
-
-## B1 詞彙
-
-## B1 文法
-
-## 口語用法
-`;
-    await assert.rejects(() => validateLessonMdx(shell, task), /substantive content/);
-
-    const content = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
-    const missingA2Vocabulary = content.replace(
-      '| 英文 | 繁體中文 | 用法說明 |\n| --- | --- | --- |\n| zoo | 動物園 | 表示展示動物的場所。 |\n\n',
-      '',
-    );
-    await assert.rejects(() => validateLessonMdx(missingA2Vocabulary, task), /A2.*substantive content/);
   });
 });
 
@@ -216,42 +67,89 @@ describe('lesson persistence and generation coordination', () => {
     assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'), '# First');
   });
 
-  it('does not write invalid generated output', async () => {
+  it('publishes generated JSON in the canonical serialized form', async () => {
     const rootDir = await createStoredTaskFixture();
-    await assert.rejects(
-      () =>
-        generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
-          {
-            generator: { generate: async () => '# invalid' },
-            getStatus: getReadyStatus,
-          },
-        ),
-      (error: unknown) => {
-        assert.ok(error instanceof GenerationError);
-        assert.match(error.message, /invalid/i);
-        assert.match(
-          error.diagnosticsPath ?? '',
-          /^\.local\/errors\/lesson\/[^/]+\/error\.json$/,
-        );
-        return true;
+    const expected = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
+    const rawResponse = JSON.stringify(JSON.parse(expected));
+
+    await generateLesson(
+      { slug: 'lesson', modelPreset: 'best', rootDir },
+      {
+        generator: { generate: async () => rawResponse },
+        getStatus: getReadyStatus,
       },
     );
-    await assert.rejects(
-      () => readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'),
-      /ENOENT/,
+
+    assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'), expected);
+  });
+
+  it('publishes a task-derived fallback when generated JSON is invalid', async () => {
+    const rootDir = await createStoredTaskFixture();
+    await generateLesson(
+      { slug: 'lesson', modelPreset: 'best', rootDir },
+      {
+        generator: { generate: async () => '# invalid' },
+        getStatus: getReadyStatus,
+      },
     );
 
-    const attempts = await readdir(join(rootDir, '.local/errors/lesson'));
-    assert.equal(attempts.length, 1);
-    const attemptDir = join(rootDir, '.local/errors/lesson', attempts[0]!);
-    const details = JSON.parse(await readFile(join(attemptDir, 'error.json'), 'utf8'));
-    assert.equal(details.taskId, 'lesson');
-    assert.equal(details.code, 'GENERATION_INVALID');
-    assert.equal(details.stage, 'validation');
-    assert.equal(details.generatedOutputPath, `.local/errors/lesson/${attempts[0]}/generated.mdx`);
-    assert.equal(await readFile(join(attemptDir, 'generated.mdx'), 'utf8'), '# invalid');
-    assert.equal((await readTask('lesson', rootDir)).generation.skillVersion, '3');
+    const published = JSON.parse(
+      await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'),
+    );
+    assert.deepEqual(published, {
+      schemaVersion: 1,
+      video: {
+        id: 'jNQXAC9IVRw',
+        title: 'Me at the zoo',
+        translatedTitle: 'Me at the zoo',
+      },
+      lesson: {
+        targetLanguage: 'zh',
+        cefrLevels: ['A2', 'B1'],
+        transcriptSource: 'youtube-transcript.io',
+        focus: '',
+      },
+      transcripts: [
+        {
+          time: '00:00',
+          source: 'Here we are at the zoo.',
+          translation: 'Here we are at the zoo.',
+        },
+      ],
+      vocabs: {},
+      grammars: {},
+      spokenUsage: [],
+    });
+    assert.equal((await readTask('lesson', rootDir)).generation.status, 'succeeded');
+  });
+
+  it('preserves valid generated pedagogy while catching malformed sections', async () => {
+    const rootDir = await createStoredTaskFixture();
+    const generated = JSON.parse(
+      await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8'),
+    );
+    generated.video = false;
+    generated.vocabs.A2.push(false);
+    generated.spokenUsage = false;
+
+    await generateLesson(
+      { slug: 'lesson', modelPreset: 'best', rootDir },
+      {
+        generator: { generate: async () => JSON.stringify(generated) },
+        getStatus: getReadyStatus,
+      },
+    );
+
+    const published = JSON.parse(
+      await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'),
+    );
+    assert.equal(published.video.translatedTitle, 'Me at the zoo');
+    assert.deepEqual(published.vocabs.A2, [
+      { source: 'zoo', translation: '動物園', usage: '表示展示動物的場所。' },
+      { source: '', translation: '', usage: '' },
+    ]);
+    assert.equal(published.grammars.B1[0].title, 'behind me');
+    assert.deepEqual(published.spokenUsage, []);
   });
 
   it('writes error details when generation fails before returning content', async () => {
@@ -337,7 +235,7 @@ describe('lesson persistence and generation coordination', () => {
 
   it('treats lesson publication as successful when success metadata cannot be persisted', async () => {
     const rootDir = await createStoredTaskFixture();
-    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
+    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
     const updates: string[] = [];
 
     const result = await generateLesson(
@@ -353,17 +251,14 @@ describe('lesson persistence and generation coordination', () => {
       },
     );
 
-    assert.deepEqual(result, {
-      lessonSlug: 'lesson',
-      lessonPath: '.local/lessons/lesson.mdx',
-    });
+    assert.equal(result.lessonSlug, 'lesson');
     assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'), validLesson);
     assert.deepEqual(updates, ['pending', 'succeeded']);
   });
 
   it('rejects concurrent generation before a second model call', async () => {
     const rootDir = await createStoredTaskFixture();
-    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
+    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
     let calls = 0;
     let release!: () => void;
     let generationStarted!: () => void;
@@ -420,7 +315,7 @@ describe('lesson persistence and generation coordination', () => {
       },
     };
     const prepared = await buildTaskFile(input);
-    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
+    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
     let calls = 0;
     let release!: () => void;
     let generationStarted!: () => void;
@@ -485,7 +380,7 @@ describe('lesson persistence and generation coordination', () => {
       throw error;
     }
 
-    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
+    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
     let calls = 0;
     let release!: () => void;
     let generationStarted!: () => void;
@@ -526,7 +421,7 @@ describe('lesson persistence and generation coordination', () => {
 
   it('enforces the generation deadline when a generator ignores its signal', async () => {
     const rootDir = await createStoredTaskFixture();
-    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.mdx', 'utf8');
+    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
 
     await assert.rejects(
       () =>
