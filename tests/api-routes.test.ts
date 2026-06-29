@@ -37,7 +37,7 @@ test('POST /api/tasks writes a task file and returns local paths', async () => {
   assert.equal(response.status, 200);
   assert.match(payload.taskSlug, /^\d{4}-\d{2}-\d{2}-me-at-the-zoo$/);
   assert.match(payload.taskPath, /^\.local\/tasks\/\d{4}-\d{2}-\d{2}-me-at-the-zoo\.json$/);
-  assert.match(payload.outputPath, /^\.local\/lessons\/\d{4}-\d{2}-\d{2}-me-at-the-zoo\.mdx$/);
+  assert.match(payload.outputPath, /^\.local\/lessons\/\d{4}-\d{2}-\d{2}-me-at-the-zoo\.json$/);
   assert.equal('suggestedCommand' in payload, false);
 });
 
