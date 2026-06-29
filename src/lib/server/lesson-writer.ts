@@ -11,7 +11,7 @@ export async function lessonExists(input: { rootDir?: string; slug: string }) {
 
   try {
     const { lessonsDir } = await ensureLocalDirs(input.rootDir);
-    await lstat(join(lessonsDir, `${input.slug}.mdx`));
+    await lstat(join(lessonsDir, `${input.slug}.json`));
     return true;
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return false;
@@ -34,7 +34,7 @@ export async function writeLessonOnce(input: {
 
   try {
     const { lessonsDir } = await ensureLocalDirs(input.rootDir);
-    const finalPath = join(lessonsDir, `${input.slug}.mdx`);
+    const finalPath = join(lessonsDir, `${input.slug}.json`);
     tempPath = join(lessonsDir, `.${input.slug}.${process.pid}.${randomUUID()}.tmp`);
     await writeFile(tempPath, input.content, { encoding: 'utf8', flag: 'wx' });
     await link(tempPath, finalPath);
@@ -51,5 +51,5 @@ export async function writeLessonOnce(input: {
     if (tempPath) await unlink(tempPath).catch(() => undefined);
   }
 
-  return { lessonSlug: input.slug, lessonPath: `.local/lessons/${input.slug}.mdx` };
+  return { lessonSlug: input.slug, lessonPath: `.local/lessons/${input.slug}.json` };
 }

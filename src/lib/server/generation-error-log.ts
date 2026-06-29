@@ -82,7 +82,7 @@ export async function writeGenerationErrorLog(input: {
   await mkdir(attemptDir);
 
   const relativeAttemptDir = `.local/errors/${input.taskSlug}/${attemptName}`;
-  const generatedOutputPath = `${relativeAttemptDir}/generated.mdx`;
+  const generatedOutputPath = `${relativeAttemptDir}/generated.json`;
   const errorPath = `${relativeAttemptDir}/error.json`;
   const details = {
     ...baseDetails,
@@ -93,7 +93,7 @@ export async function writeGenerationErrorLog(input: {
     encoding: 'utf8',
     flag: 'wx',
   });
-  await writeFile(join(attemptDir, 'generated.mdx'), input.generatedContent, {
+  await writeFile(join(attemptDir, 'generated.json'), input.generatedContent, {
     encoding: 'utf8',
     flag: 'wx',
   });

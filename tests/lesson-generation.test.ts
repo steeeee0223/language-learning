@@ -51,7 +51,7 @@ describe('lesson persistence and generation coordination', () => {
       () => writeLessonOnce({ rootDir, slug: 'lesson', content: '# Second' }),
       /already exists/,
     );
-    assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'), '# First');
+    assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'), '# First');
   });
 
   it('publishes generated JSON in the canonical serialized form', async () => {
@@ -67,7 +67,7 @@ describe('lesson persistence and generation coordination', () => {
       },
     );
 
-    assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'), expected);
+    assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'), expected);
   });
 
   it('publishes a task-derived fallback when generated JSON is invalid', async () => {
@@ -81,7 +81,7 @@ describe('lesson persistence and generation coordination', () => {
     );
 
     const published = JSON.parse(
-      await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'),
+      await readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'),
     );
     assert.deepEqual(published, {
       schemaVersion: 1,
@@ -128,7 +128,7 @@ describe('lesson persistence and generation coordination', () => {
     );
 
     const published = JSON.parse(
-      await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'),
+      await readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'),
     );
     assert.equal(published.video.translatedTitle, 'Me at the zoo');
     assert.deepEqual(published.vocabs.A2, [
@@ -167,7 +167,10 @@ describe('lesson persistence and generation coordination', () => {
     assert.equal(details.stage, 'generation');
     assert.equal(details.error.cause.message, 'SDK transport failed');
     assert.equal('generatedOutputPath' in details, false);
-    await assert.rejects(() => readFile(join(rootDir, '.local/errors/lesson/generated.mdx'), 'utf8'), /ENOENT/);
+    await assert.rejects(
+      () => readFile(join(rootDir, '.local/errors/lesson/generated.json'), 'utf8'),
+      /ENOENT/,
+    );
   });
 
   it('preserves the raw model response when publication loses a write race', async () => {
@@ -184,7 +187,7 @@ describe('lesson persistence and generation coordination', () => {
           {
             generator: {
               generate: async () => {
-                await writeFile(join(lessonsDir, 'lesson.mdx'), '# Won the race', 'utf8');
+                await writeFile(join(lessonsDir, 'lesson.json'), '# Won the race', 'utf8');
                 return rawResponse;
               },
             },
@@ -204,7 +207,7 @@ describe('lesson persistence and generation coordination', () => {
     assert.equal(details.stage, 'write');
     assert.match(
       details.generatedOutputPath,
-      /^\.local\/errors\/lesson\/[^/]+\/generated\.mdx$/,
+      /^\.local\/errors\/lesson\/[^/]+\/generated\.json$/,
     );
     assert.equal(
       await readFile(join(rootDir, details.generatedOutputPath), 'utf8'),
@@ -216,7 +219,7 @@ describe('lesson persistence and generation coordination', () => {
   it('rejects an existing lesson before spending a model call', async () => {
     const rootDir = await createStoredTaskFixture();
     const { lessonsDir } = await ensureLocalDirs(rootDir);
-    await writeFile(join(lessonsDir, 'lesson.mdx'), '# Existing', 'utf8');
+    await writeFile(join(lessonsDir, 'lesson.json'), '# Existing', 'utf8');
     let calls = 0;
     await assert.rejects(
       () =>
@@ -249,7 +252,7 @@ describe('lesson persistence and generation coordination', () => {
     };
     const rootDir = await createStoredTaskFixture({ generation });
     const { lessonsDir } = await ensureLocalDirs(rootDir);
-    await writeFile(join(lessonsDir, 'lesson.mdx'), '# Existing', 'utf8');
+    await writeFile(join(lessonsDir, 'lesson.json'), '# Existing', 'utf8');
 
     await assert.rejects(
       () =>
@@ -283,9 +286,12 @@ describe('lesson persistence and generation coordination', () => {
 
     assert.deepEqual(result, {
       lessonSlug: 'lesson',
-      lessonPath: '.local/lessons/lesson.mdx',
+      lessonPath: '.local/lessons/lesson.json',
     });
-    assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'), validLesson);
+    assert.equal(
+      await readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'),
+      validLesson,
+    );
     assert.deepEqual(updates, ['pending', 'succeeded']);
   });
 
@@ -479,7 +485,7 @@ describe('lesson persistence and generation coordination', () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 50));
     await assert.rejects(
-      () => readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'),
+      () => readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'),
       /ENOENT/,
     );
   });
@@ -510,14 +516,17 @@ describe('lesson persistence and generation coordination', () => {
         return true;
       },
     );
-    await assert.rejects(() => readFile(join(externalDir, 'lessons/lesson.mdx'), 'utf8'), /ENOENT/);
+    await assert.rejects(
+      () => readFile(join(externalDir, 'lessons/lesson.json'), 'utf8'),
+      /ENOENT/,
+    );
   });
 
   it('treats a dangling final lesson symlink as an existing lesson', async (context) => {
     const rootDir = await createStoredTaskFixture();
     const { lessonsDir } = await ensureLocalDirs(rootDir);
     try {
-      await symlink(join(rootDir, 'missing-lesson.mdx'), join(lessonsDir, 'lesson.mdx'), 'file');
+      await symlink(join(rootDir, 'missing-lesson.json'), join(lessonsDir, 'lesson.json'), 'file');
     } catch (error) {
       if (
         process.platform === 'win32' &&
