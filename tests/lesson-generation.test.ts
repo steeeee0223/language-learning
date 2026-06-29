@@ -170,6 +170,49 @@ describe('lesson persistence and generation coordination', () => {
     await assert.rejects(() => readFile(join(rootDir, '.local/errors/lesson/generated.mdx'), 'utf8'), /ENOENT/);
   });
 
+  it('preserves the raw model response when publication loses a write race', async () => {
+    const rootDir = await createStoredTaskFixture();
+    const { lessonsDir } = await ensureLocalDirs(rootDir);
+    const fixture = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
+    const rawResponse = JSON.stringify(JSON.parse(fixture));
+    let diagnosticsPath = '';
+
+    await assert.rejects(
+      () =>
+        generateLesson(
+          { slug: 'lesson', modelPreset: 'best', rootDir },
+          {
+            generator: {
+              generate: async () => {
+                await writeFile(join(lessonsDir, 'lesson.mdx'), '# Won the race', 'utf8');
+                return rawResponse;
+              },
+            },
+            getStatus: getReadyStatus,
+          },
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof GenerationError);
+        assert.equal(error.code, 'LESSON_EXISTS');
+        diagnosticsPath = error.diagnosticsPath ?? '';
+        assert.match(diagnosticsPath, /^\.local\/errors\/lesson\/[^/]+\/error\.json$/);
+        return true;
+      },
+    );
+
+    const details = JSON.parse(await readFile(join(rootDir, diagnosticsPath), 'utf8'));
+    assert.equal(details.stage, 'write');
+    assert.match(
+      details.generatedOutputPath,
+      /^\.local\/errors\/lesson\/[^/]+\/generated\.mdx$/,
+    );
+    assert.equal(
+      await readFile(join(rootDir, details.generatedOutputPath), 'utf8'),
+      rawResponse,
+    );
+    assert.notEqual(rawResponse, fixture);
+  });
+
   it('rejects an existing lesson before spending a model call', async () => {
     const rootDir = await createStoredTaskFixture();
     const { lessonsDir } = await ensureLocalDirs(rootDir);
@@ -238,7 +281,10 @@ describe('lesson persistence and generation coordination', () => {
       },
     );
 
-    assert.equal(result.lessonSlug, 'lesson');
+    assert.deepEqual(result, {
+      lessonSlug: 'lesson',
+      lessonPath: '.local/lessons/lesson.mdx',
+    });
     assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.mdx'), 'utf8'), validLesson);
     assert.deepEqual(updates, ['pending', 'succeeded']);
   });
