@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server.js';
 
+import { lessonToPlainText } from '../../../../lib/lesson-content.ts';
 import { getErrorMessage, jsonError } from '../../../../lib/server/http.ts';
 import { readLesson } from '../../../../lib/server/lessons.ts';
 
@@ -37,7 +38,9 @@ export async function POST(request: Request) {
             object: 'block',
             type: 'paragraph',
             paragraph: {
-              rich_text: [{ type: 'text', text: { content: lesson.content.slice(0, 1900) } }],
+              rich_text: [
+                { type: 'text', text: { content: lessonToPlainText(lesson.content).slice(0, 1900) } },
+              ],
             },
           },
         ],

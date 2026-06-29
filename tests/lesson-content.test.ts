@@ -5,6 +5,7 @@ import {
   createFallbackLesson,
   formatTimestamp,
   lessonSchema,
+  lessonToPlainText,
   parseGeneratedLesson,
   parseLessonValue,
 } from '@/lib/lesson-content.ts';
@@ -45,6 +46,114 @@ const task = storedTaskSchema.parse({
 describe('formatTimestamp', () => {
   it('floors fractional seconds and formats them as mm:ss', () => {
     assert.equal(formatTimestamp(125.9), '02:05');
+  });
+});
+
+describe('lessonToPlainText', () => {
+  it('serializes every requested lesson section in canonical CEFR order', () => {
+    const content = lessonSchema.parse({
+      schemaVersion: 1,
+      video: {
+        id: 'video-id',
+        title: 'Original zoo title',
+        translatedTitle: 'Translated zoo title',
+      },
+      lesson: {
+        targetLanguage: 'en',
+        cefrLevels: ['B1', 'A2'],
+        transcriptSource: 'youtube-transcript.io',
+        focus: 'Everyday speech',
+      },
+      transcripts: [
+        { time: '00:01', source: 'Here we are.', translation: 'We have arrived.' },
+      ],
+      vocabs: {
+        B1: [{ source: 'pretty much', translation: 'almost', usage: 'adverbial phrase' }],
+        A2: [{ source: 'zoo', translation: 'animal park', usage: 'noun' }],
+        C1: [{ source: 'excluded', translation: 'excluded', usage: 'excluded' }],
+      },
+      grammars: {
+        B1: [
+          {
+            title: 'The thing is',
+            explanation: 'Introduces a point.',
+            examples: [{ source: 'The thing is, I agree.', translation: 'Actually, I agree.' }],
+          },
+        ],
+        A2: [
+          {
+            title: 'Here we are',
+            explanation: 'Signals arrival.',
+            examples: [{ source: 'Here we are!', translation: 'We arrived!' }],
+          },
+        ],
+        C1: [{ title: 'Excluded', explanation: 'Excluded.', examples: [] }],
+      },
+      spokenUsage: [
+        {
+          title: 'pretty much',
+          explanation: 'An informal approximation.',
+          examples: [{ source: 'That is pretty much it.', translation: 'That is almost all.' }],
+        },
+      ],
+    });
+
+    const result = lessonToPlainText(content);
+
+    assert.equal(
+      result,
+      [
+        'Translated zoo title',
+        '',
+        'Lesson information',
+        'Original title: Original zoo title',
+        'Video: https://www.youtube.com/watch?v=video-id',
+        'Video ID: video-id',
+        'Transcript source: youtube-transcript.io',
+        'Target language: en',
+        'Requested CEFR levels: A2, B1',
+        'Focus: Everyday speech',
+        '',
+        'Sentence-by-sentence translation',
+        'Time: 00:01',
+        'Source: Here we are.',
+        'Translation: We have arrived.',
+        '',
+        'A2 Vocabulary',
+        'Source: zoo',
+        'Translation: animal park',
+        'Usage: noun',
+        '',
+        'A2 Grammar',
+        'Here we are',
+        'Signals arrival.',
+        'Examples',
+        'Source: Here we are!',
+        'Translation: We arrived!',
+        '',
+        'B1 Vocabulary',
+        'Source: pretty much',
+        'Translation: almost',
+        'Usage: adverbial phrase',
+        '',
+        'B1 Grammar',
+        'The thing is',
+        'Introduces a point.',
+        'Examples',
+        'Source: The thing is, I agree.',
+        'Translation: Actually, I agree.',
+        '',
+        'Spoken usage',
+        'pretty much',
+        'An informal approximation.',
+        'Examples',
+        'Source: That is pretty much it.',
+        'Translation: That is almost all.',
+      ].join('\n'),
+    );
+    assert.equal(result.includes('[object Object]'), false);
+    assert.equal(result.includes('Excluded'), false);
+    assert.ok(result.indexOf('A2 Vocabulary') < result.indexOf('B1 Vocabulary'));
   });
 });
 

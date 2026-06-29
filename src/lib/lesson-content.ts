@@ -6,7 +6,11 @@ import {
   type CefrLevel,
   type TargetLanguage,
 } from '@/lib/contracts.ts';
-import { orderCefrLevels } from '@/lib/lesson-sections.ts';
+import {
+  lessonLabels,
+  lessonSectionLabels,
+  orderCefrLevels,
+} from '@/lib/lesson-sections.ts';
 import type { StoredTask } from '@/lib/server/task-schema.ts';
 
 const text = z.string().catch(() => '');
@@ -86,6 +90,89 @@ export const lessonSchema = z.object({
 });
 
 export type LessonContent = z.infer<typeof lessonSchema>;
+
+export function lessonToPlainText(content: LessonContent): string {
+  const language = content.lesson.targetLanguage;
+  const labels = lessonLabels[language];
+  const sectionLabels = lessonSectionLabels[language];
+  const levels = orderCefrLevels(content.lesson.cefrLevels);
+  const sections: string[][] = [
+    [content.video.translatedTitle],
+    [
+      sectionLabels.metadata,
+      `${labels.originalTitle}: ${content.video.title}`,
+      `${labels.video}: https://www.youtube.com/watch?v=${encodeURIComponent(content.video.id)}`,
+      `${labels.videoId}: ${content.video.id}`,
+      `${labels.transcriptSource}: ${content.lesson.transcriptSource}`,
+      `${labels.targetLanguage}: ${content.lesson.targetLanguage}`,
+      `${labels.requestedLevels}: ${levels.join(', ')}`,
+      `${labels.focus}: ${content.lesson.focus}`,
+    ],
+    [
+      sectionLabels.translation,
+      ...(content.transcripts.length === 0
+        ? [labels.noContent]
+        : content.transcripts.flatMap((transcript) => [
+            `${labels.time}: ${transcript.time}`,
+            `${labels.source}: ${transcript.source}`,
+            `${labels.translation}: ${transcript.translation}`,
+          ])),
+    ],
+  ];
+
+  for (const level of levels) {
+    const vocabulary = content.vocabs[level] ?? [];
+    sections.push([
+      `${level} ${sectionLabels.vocabulary}`,
+      ...(vocabulary.length === 0
+        ? [labels.noContent]
+        : vocabulary.flatMap((item) => [
+            `${labels.source}: ${item.source}`,
+            `${labels.translation}: ${item.translation}`,
+            `${labels.usage}: ${item.usage}`,
+          ])),
+    ]);
+
+    const grammars = content.grammars[level] ?? [];
+    sections.push([
+      `${level} ${sectionLabels.grammar}`,
+      ...(grammars.length === 0
+        ? [labels.noContent]
+        : grammars.flatMap((grammar) => [
+            grammar.title,
+            grammar.explanation,
+            labels.examples,
+            ...exampleLines(grammar.examples, labels),
+          ])),
+    ]);
+  }
+
+  sections.push([
+    sectionLabels.spokenUsage,
+    ...(content.spokenUsage.length === 0
+      ? [labels.noContent]
+      : content.spokenUsage.flatMap((usage) => [
+          usage.title,
+          usage.explanation,
+          labels.examples,
+          ...exampleLines(usage.examples, labels),
+        ])),
+  ]);
+
+  return sections.flatMap((section, index) => (index === 0 ? section : ['', ...section])).join('\n');
+}
+
+function exampleLines(
+  examples: LessonContent['spokenUsage'][number]['examples'],
+  labels: (typeof lessonLabels)[TargetLanguage],
+): string[] {
+  if (examples.length === 0) return [labels.noContent];
+
+  return examples.flatMap((example) => [
+    `${labels.source}: ${example.source}`,
+    `${labels.translation}: ${example.translation}`,
+  ]);
+}
 
 export function formatTimestamp(seconds: number) {
   const wholeSeconds = Math.floor(seconds);
