@@ -82,6 +82,67 @@ describe('parseGeneratedLesson', () => {
     });
   });
 
+  it('preserves valid pedagogical sections when trusted metadata containers are malformed', () => {
+    const pedagogicalSections = {
+      transcripts: [{ time: '99:99', source: 'Override.', translation: '我們到了。' }],
+      vocabs: { A2: [{ source: 'zoo', translation: '動物園', usage: 'noun' }] },
+      grammars: {
+        B1: [{ title: 'The thing is', explanation: 'Introduces a point.', examples: [] }],
+      },
+      spokenUsage: [
+        { title: 'Here we are', explanation: 'Signals arrival.', examples: [] },
+      ],
+    };
+    const validVideo = { id: 'override', title: 'Override', translatedTitle: '我在動物園' };
+    const validLesson = {
+      targetLanguage: 'en',
+      cefrLevels: ['C2'],
+      transcriptSource: 'override',
+      focus: 'Spoken English',
+    };
+
+    for (const metadata of [
+      { video: false, lesson: validLesson },
+      { video: validVideo, lesson: false },
+      { lesson: validLesson },
+      { video: validVideo },
+    ]) {
+      const result = parseGeneratedLesson(
+        JSON.stringify({ schemaVersion: 1, ...metadata, ...pedagogicalSections }),
+        task,
+      );
+
+      assert.equal(result.transcripts[0]?.translation, '我們到了。');
+      assert.deepEqual(result.vocabs, pedagogicalSections.vocabs);
+      assert.deepEqual(result.grammars, pedagogicalSections.grammars);
+      assert.deepEqual(result.spokenUsage, pedagogicalSections.spokenUsage);
+    }
+  });
+
+  it('strips invalid CEFR keys without discarding valid requested-level siblings', () => {
+    const result = parseGeneratedLesson(
+      JSON.stringify({
+        ...fallback,
+        vocabs: {
+          A2: [{ source: 'zoo', translation: '動物園', usage: 'noun' }],
+          D1: [{ source: 'invalid', translation: '無效', usage: 'ignored' }],
+        },
+        grammars: {
+          B1: [{ title: 'The thing is', explanation: 'Introduces a point.', examples: [] }],
+          D1: [{ title: 'Invalid', explanation: 'Ignored.', examples: [] }],
+        },
+      }),
+      task,
+    );
+
+    assert.deepEqual(result.vocabs, {
+      A2: [{ source: 'zoo', translation: '動物園', usage: 'noun' }],
+    });
+    assert.deepEqual(result.grammars, {
+      B1: [{ title: 'The thing is', explanation: 'Introduces a point.', examples: [] }],
+    });
+  });
+
   it('normalizes model content around trusted task fields', () => {
     const spokenUsage = [
       {

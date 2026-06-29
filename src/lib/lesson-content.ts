@@ -34,23 +34,54 @@ const spokenUsageItemSchema = z
     examples: z.array(exampleSchema).catch(() => []),
   })
   .catch(() => ({ title: '', explanation: '', examples: [] }));
+const vocabRecordSchema = z
+  .record(z.string(), z.array(vocabItemSchema).catch(() => []))
+  .catch(() => ({}))
+  .transform((record) => {
+    const result: Partial<Record<CefrLevel, z.infer<typeof vocabItemSchema>[]>> = {};
+
+    for (const [key, items] of Object.entries(record)) {
+      const level = cefrLevelSchema.safeParse(key);
+      if (level.success) result[level.data] = items;
+    }
+
+    return result;
+  });
+const grammarRecordSchema = z
+  .record(z.string(), z.array(grammarItemSchema).catch(() => []))
+  .catch(() => ({}))
+  .transform((record) => {
+    const result: Partial<Record<CefrLevel, z.infer<typeof grammarItemSchema>[]>> = {};
+
+    for (const [key, items] of Object.entries(record)) {
+      const level = cefrLevelSchema.safeParse(key);
+      if (level.success) result[level.data] = items;
+    }
+
+    return result;
+  });
 
 export const lessonSchema = z.object({
   schemaVersion: z.literal(1).catch(() => 1 as const),
-  video: z.object({ id: text, title: text, translatedTitle: text }),
-  lesson: z.object({
-    targetLanguage: targetLanguageSchema.catch(() => 'en' as const),
-    cefrLevels: z.array(cefrLevelSchema).catch(() => []),
-    transcriptSource: text,
-    focus: text,
-  }),
+  video: z
+    .object({ id: text, title: text, translatedTitle: text })
+    .catch(() => ({ id: '', title: '', translatedTitle: '' })),
+  lesson: z
+    .object({
+      targetLanguage: targetLanguageSchema.catch(() => 'en' as const),
+      cefrLevels: z.array(cefrLevelSchema).catch(() => []),
+      transcriptSource: text,
+      focus: text,
+    })
+    .catch(() => ({
+      targetLanguage: 'en' as const,
+      cefrLevels: [],
+      transcriptSource: '',
+      focus: '',
+    })),
   transcripts: z.array(transcriptSchema).catch(() => []),
-  vocabs: z
-    .partialRecord(cefrLevelSchema, z.array(vocabItemSchema).catch(() => []))
-    .catch(() => ({})),
-  grammars: z
-    .partialRecord(cefrLevelSchema, z.array(grammarItemSchema).catch(() => []))
-    .catch(() => ({})),
+  vocabs: vocabRecordSchema,
+  grammars: grammarRecordSchema,
   spokenUsage: z.array(spokenUsageItemSchema).catch(() => []),
 });
 
