@@ -1,4 +1,4 @@
-import { DocsBody, DocsDescription, DocsPage, DocsTitle } from 'fumadocs-ui/layouts/docs/page';
+import { DocsBody, DocsDescription, DocsPage } from 'fumadocs-ui/layouts/docs/page';
 
 import { LearningDocsLayout } from '@/components/learning-docs-layout';
 import { LessonActions } from '@/components/lessons-client';
@@ -24,7 +24,6 @@ export default async function LessonDetailPage(props: LessonDetailPageProps) {
   return (
     <LearningDocsLayout lessons={lessons}>
       <DocsPage toc={toc}>
-        <DocsTitle>{lesson.title}</DocsTitle>
         <DocsDescription>
           Generated <time dateTime={lesson.generatedAt}>{generatedAt}</time>
         </DocsDescription>
