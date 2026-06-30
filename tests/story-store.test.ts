@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, realpath, utimes, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, realpath, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -17,12 +17,19 @@ const bundle = {
   },
 };
 
-function runStoryWorker(rootDir: string, label: string) {
+type StoryWorkerOptions = {
+  providerHoldMs?: number;
+  waitForPeerReady?: boolean;
+  waitForPeerProvider?: boolean;
+  lockTiming?: { pollMs: number; staleAfterMs: number };
+};
+
+function runStoryWorker(rootDir: string, label: string, options: StoryWorkerOptions = {}) {
   return new Promise<{ story: Story; reused: boolean }>(
     (resolve, reject) => {
       const child = spawn(
         process.execPath,
-        ['--import', 'tsx', 'tests/fixtures/story-store-worker.ts', rootDir, label],
+        ['--import', 'tsx', 'tests/fixtures/story-store-worker.ts', rootDir, label, JSON.stringify(options)],
         { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'pipe'] },
       );
       let stdout = '';
@@ -39,6 +46,19 @@ function runStoryWorker(rootDir: string, label: string) {
       });
     },
   );
+}
+
+async function waitForFile(path: string) {
+  const deadline = Date.now() + 2_000;
+  while (true) {
+    try {
+      await access(path);
+      return;
+    } catch {
+      if (Date.now() >= deadline) throw new Error(`Timed out waiting for worker marker: ${path}`);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
 }
 
 test('createOrReuseStory writes and reads a validated story on the first request', async () => {
@@ -126,11 +146,37 @@ test('story creation recovers an abandoned stale filesystem lock', async () => {
   const lockDir = join(storiesDir, '.jNQXAC9IVRw.lock');
   await mkdir(lockDir, { recursive: true });
   await writeFile(join(lockDir, 'owner.json'), JSON.stringify({ pid: 2_147_483_647, token: 'abandoned' }));
-  const staleTime = new Date(Date.now() - 10 * 60_000);
+  const staleTime = new Date(Date.now() - 100);
   await utimes(lockDir, staleTime, staleTime);
 
-  const result = await createOrReuseStory({ url, rootDir, fetchBundle: async () => bundle });
+  const result = await createOrReuseStory({
+    url,
+    rootDir,
+    lockTiming: { pollMs: 5, staleAfterMs: 50 },
+    fetchBundle: async () => bundle,
+  });
 
   assert.equal(result.reused, false);
   assert.deepEqual(await readdir(storiesDir), ['jNQXAC9IVRw.json']);
+});
+
+test('a waiter outlives the former maximum wait while a live owner finishes', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-story-slow-owner-'));
+  const formerMaxWaitMs = 20;
+  const providerHoldMs = 750;
+  assert.ok(providerHoldMs > formerMaxWaitMs);
+  const options = {
+    providerHoldMs,
+    waitForPeerReady: false,
+    waitForPeerProvider: false,
+    lockTiming: { pollMs: 5, staleAfterMs: formerMaxWaitMs },
+  };
+  const owner = runStoryWorker(rootDir, 'owner', options);
+  await waitForFile(join(rootDir, '.story-worker-provider', 'owner'));
+  const waiter = runStoryWorker(rootDir, 'waiter', options);
+
+  const [ownerResult, waiterResult] = await Promise.all([owner, waiter]);
+
+  assert.deepEqual(waiterResult.story, ownerResult.story);
+  assert.deepEqual(await readStory('jNQXAC9IVRw', rootDir), ownerResult.story);
 });

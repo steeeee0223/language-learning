@@ -23,6 +23,10 @@ import { runSingleFlightOperation } from './task-operation-lock';
 type CreateOrReuseStoryInput = {
   url: string;
   rootDir?: string;
+  lockTiming?: {
+    pollMs: number;
+    staleAfterMs: number;
+  };
   fetchBundle: (url: string) => Promise<TranscriptBundle>;
 };
 
@@ -38,7 +42,6 @@ export class StoryCreationError extends Error {
   }
 }
 
-const STORY_LOCK_WAIT_MS = 10_000;
 const STORY_LOCK_STALE_MS = 5 * 60_000;
 const STORY_LOCK_POLL_MS = 25;
 
@@ -82,7 +85,7 @@ async function readLockOwner(lockPath: string) {
   return undefined;
 }
 
-async function recoverStaleLock(lockPath: string) {
+async function recoverStaleLock(lockPath: string, staleAfterMs: number) {
   let lockStats;
   try {
     lockStats = await stat(lockPath);
@@ -91,7 +94,7 @@ async function recoverStaleLock(lockPath: string) {
     throw error;
   }
 
-  if (Date.now() - lockStats.mtimeMs <= STORY_LOCK_STALE_MS) return;
+  if (Date.now() - lockStats.mtimeMs <= staleAfterMs) return;
   const owner = await readLockOwner(lockPath);
   if (owner && isProcessAlive(owner.pid)) return;
 
@@ -104,21 +107,21 @@ async function recoverStaleLock(lockPath: string) {
   }
 }
 
-async function acquireStoryLock(storiesDir: string, id: string) {
+async function acquireStoryLock(
+  storiesDir: string,
+  id: string,
+  timing: { pollMs: number; staleAfterMs: number },
+) {
   const lockPath = resolve(storiesDir, `.${id}.lock`);
   const token = randomUUID();
-  const startedAt = Date.now();
 
   while (true) {
     try {
       await mkdir(lockPath);
     } catch (error) {
       if (!hasErrorCode(error, 'EEXIST')) throw error;
-      await recoverStaleLock(lockPath);
-      if (Date.now() - startedAt >= STORY_LOCK_WAIT_MS) {
-        throw new Error('Timed out waiting for story creation.');
-      }
-      await delay(STORY_LOCK_POLL_MS);
+      await recoverStaleLock(lockPath, timing.staleAfterMs);
+      await delay(timing.pollMs);
       continue;
     }
 
@@ -216,23 +219,25 @@ export async function createOrReuseStory(input: CreateOrReuseStoryInput) {
 
   const paths = await ensureLocalDirs(input.rootDir);
   return runSingleFlightOperation(paths.rootDir, `story:${id}`, async () => {
-    const releaseLock = await acquireStoryLock(paths.storiesDir, id);
+    const releaseLock = await acquireStoryLock(paths.storiesDir, id, {
+      pollMs: input.lockTiming?.pollMs ?? STORY_LOCK_POLL_MS,
+      staleAfterMs: input.lockTiming?.staleAfterMs ?? STORY_LOCK_STALE_MS,
+    });
     try {
       const current = await findStory(id, paths.rootDir);
       if (current) {
         return { story: current.story, storyPath: current.storyPath, reused: true as const };
       }
 
-      let fetchedBundle: TranscriptBundle;
+      let bundle: TranscriptBundle;
       try {
-        fetchedBundle = await input.fetchBundle(input.url);
+        bundle = transcriptBundleSchema.parse(await input.fetchBundle(input.url));
+        if (bundle.video.id !== id) {
+          throw new Error('Fetched transcript bundle does not match the requested video.');
+        }
       } catch (error) {
-        if (error instanceof StoryCreationError) throw error;
+        if (error instanceof StoryCreationError && error.code === 'MISSING_CONFIGURATION') throw error;
         throw new StoryCreationError('PROVIDER_FAILED', { cause: error });
-      }
-      const bundle = transcriptBundleSchema.parse(fetchedBundle);
-      if (bundle.video.id !== id) {
-        throw new Error('Fetched transcript bundle does not match the requested video.');
       }
 
       const story = storySchema.parse({

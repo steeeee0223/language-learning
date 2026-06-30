@@ -126,6 +126,15 @@ test('POST /api/stories rejects a non-URL before fetching a transcript', async (
   assert.equal(fetchCount, 0);
 });
 
+test('POST /api/stories rejects malformed JSON as an invalid payload', async () => {
+  const response = await createStoriesPostHandler()(
+    new Request('http://localhost/api/stories', { method: 'POST', body: '{' }),
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'Invalid story payload.' });
+});
+
 test('POST /api/stories rejects a non-YouTube URL with a safe client error', async () => {
   const response = await createStoriesPostHandler({
     fetchBundle: async () => {
@@ -159,6 +168,48 @@ test('POST /api/stories hides transcript provider failure details', async () => 
   assert.equal(response.status, 502);
   assert.deepEqual(await response.json(), { error: 'Transcript provider request failed.' });
   assert.deepEqual(await readdir(join(rootDir, '.local', 'stories')), []);
+});
+
+test('POST /api/stories classifies an invalid provider result as a safe upstream failure', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-provider-schema-'));
+  const response = await createStoriesPostHandler({
+    rootDir,
+    fetchBundle: async () =>
+      ({
+        video: { url: 'https://youtu.be/jNQXAC9IVRw', id: 'jNQXAC9IVRw', title: 'Me at the zoo' },
+        transcript: { source: 'youtube-transcript.io', segments: [] },
+      }) as never,
+  })(
+    new Request('http://localhost/api/stories', {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://youtu.be/jNQXAC9IVRw' }),
+    }),
+  );
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { error: 'Transcript provider request failed.' });
+});
+
+test('POST /api/stories classifies a mismatched provider video as a safe upstream failure', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-provider-mismatch-'));
+  const response = await createStoriesPostHandler({
+    rootDir,
+    fetchBundle: async (url) => ({
+      video: { url, id: 'dQw4w9WgXcQ', title: 'A different video' },
+      transcript: {
+        source: 'youtube-transcript.io',
+        segments: [{ text: 'Different.', start: 0, duration: 1 }],
+      },
+    }),
+  })(
+    new Request('http://localhost/api/stories', {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://youtu.be/jNQXAC9IVRw' }),
+    }),
+  );
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { error: 'Transcript provider request failed.' });
 });
 
 test('POST /api/stories reports missing transcript configuration as unavailable', async () => {

@@ -25,7 +25,13 @@ async function fetchConfiguredTranscriptBundle(url: string) {
 export function createStoriesPostHandler(dependencies: StoriesPostDependencies = {}) {
   return async function postStories(request: Request) {
     try {
-      const payload = createStoryRequestSchema.safeParse(await request.json());
+      let requestBody: unknown;
+      try {
+        requestBody = await request.json();
+      } catch {
+        return jsonError('Invalid story payload.');
+      }
+      const payload = createStoryRequestSchema.safeParse(requestBody);
       if (!payload.success) {
         return jsonError('Invalid story payload.');
       }
