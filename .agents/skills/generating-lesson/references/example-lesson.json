@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "video": {
+    "id": "jNQXAC9IVRw",
+    "title": "Me at the zoo",
+    "translatedTitle": "我在動物園"
+  },
+  "lesson": {
+    "targetLanguage": "zh",
+    "cefrLevels": ["A2", "B1"],
+    "transcriptSource": "youtube-transcript.io",
+    "focus": "地點表達與基本方位描述"
+  },
+  "transcripts": [
+    {
+      "time": "00:00",
+      "source": "Here we are at the zoo.",
+      "translation": "我們現在在動物園。"
+    },
+    {
+      "time": "00:01",
+      "source": "The elephants are behind me.",
+      "translation": "大象就在我身後。"
+    }
+  ],
+  "vocabs": {
+    "A2": [
+      {
+        "source": "zoo",
+        "translation": "動物園",
+        "usage": "表示展示與照護動物的場所。"
+      }
+    ],
+    "B1": [
+      {
+        "source": "behind",
+        "translation": "在……後方",
+        "usage": "用來描述人或事物的相對位置。"
+      }
+    ]
+  },
+  "grammars": {
+    "A2": [
+      {
+        "title": "使用 Here we are 表示抵達",
+        "explanation": "用來表示說話者與同行者已經抵達目前的位置。",
+        "examples": [
+          {
+            "source": "Here we are at the zoo.",
+            "translation": "我們現在在動物園。"
+          }
+        ]
+      }
+    ],
+    "B1": [
+      {
+        "title": "使用 behind 描述相對位置",
+        "explanation": "介系詞 behind 後接人稱代名詞或名詞，用來指出某人或某物位於另一對象的後方。",
+        "examples": [
+          {
+            "source": "The elephants are behind me.",
+            "translation": "大象就在我身後。"
+          }
+        ]
+      }
+    ]
+  },
+  "spokenUsage": [
+    {
+      "title": "抵達時使用 Here we are",
+      "explanation": "口語中抵達某處時，常用 Here we are 提醒同行者已經到達。",
+      "examples": [
+        {
+          "source": "Here we are at the zoo.",
+          "translation": "我們現在在動物園。"
+        }
+      ]
+    }
+  ]
+}
