@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { describe, it } from 'node:test';
@@ -124,6 +124,72 @@ test('POST /api/stories rejects a non-URL before fetching a transcript', async (
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: 'Invalid story payload.' });
   assert.equal(fetchCount, 0);
+});
+
+test('POST /api/stories rejects a non-YouTube URL with a safe client error', async () => {
+  const response = await createStoriesPostHandler({
+    fetchBundle: async () => {
+      throw new Error('Transcript fetch must not run.');
+    },
+  })(
+    new Request('http://localhost/api/stories', {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://example.com/video' }),
+    }),
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'Invalid YouTube URL.' });
+});
+
+test('POST /api/stories hides transcript provider failure details', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-provider-error-'));
+  const response = await createStoriesPostHandler({
+    rootDir,
+    fetchBundle: async () => {
+      throw new Error('provider leaked token secret-123 at /private/provider.json');
+    },
+  })(
+    new Request('http://localhost/api/stories', {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://youtu.be/jNQXAC9IVRw' }),
+    }),
+  );
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { error: 'Transcript provider request failed.' });
+  assert.deepEqual(await readdir(join(rootDir, '.local', 'stories')), []);
+});
+
+test('POST /api/stories reports missing transcript configuration as unavailable', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-missing-config-'));
+  const originalApiKey = process.env.YOUTUBE_TRANSCRIPT_API_KEY;
+  delete process.env.YOUTUBE_TRANSCRIPT_API_KEY;
+  const response = await createStoriesPostHandler({ rootDir })(
+    new Request('http://localhost/api/stories', {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://youtu.be/jNQXAC9IVRw' }),
+    }),
+  );
+  if (originalApiKey !== undefined) process.env.YOUTUBE_TRANSCRIPT_API_KEY = originalApiKey;
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'YOUTUBE_TRANSCRIPT_API_KEY is not configured.' });
+});
+
+test('POST /api/stories hides unexpected storage failure details', async () => {
+  const parentDir = await mkdtemp(join(tmpdir(), 'language-learning-api-storage-error-'));
+  const rootDir = join(parentDir, 'not-a-directory');
+  await writeFile(rootDir, 'private storage contents');
+  const response = await createStoriesPostHandler({ rootDir })(
+    new Request('http://localhost/api/stories', {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://youtu.be/jNQXAC9IVRw' }),
+    }),
+  );
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: 'Story creation failed.' });
 });
 
 test('GET /api/lessons lists JSON lessons and detail returns structured content', async () => {

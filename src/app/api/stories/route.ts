@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server.js';
 import { z } from 'zod';
 
 import type { TranscriptBundle } from '../../../lib/contracts.ts';
-import { createOrReuseStory } from '../../../lib/server/story-store.ts';
+import { createOrReuseStory, StoryCreationError } from '../../../lib/server/story-store.ts';
 import { fetchTranscriptBundle } from '../../../lib/server/transcripts.ts';
-import { getErrorMessage, jsonError } from '../../../lib/server/http.ts';
+import { jsonError } from '../../../lib/server/http.ts';
 import { storyResponseSchema } from '../../../lib/task-contracts.ts';
 
 const createStoryRequestSchema = z.strictObject({ url: z.url() });
@@ -17,7 +17,7 @@ type StoriesPostDependencies = {
 async function fetchConfiguredTranscriptBundle(url: string) {
   const apiKey = process.env.YOUTUBE_TRANSCRIPT_API_KEY;
   if (!apiKey) {
-    throw new Error('YOUTUBE_TRANSCRIPT_API_KEY is not configured.');
+    throw new StoryCreationError('MISSING_CONFIGURATION');
   }
   return fetchTranscriptBundle({ url, apiKey });
 }
@@ -47,8 +47,17 @@ export function createStoriesPostHandler(dependencies: StoriesPostDependencies =
         }),
       );
     } catch (error) {
-      const message = getErrorMessage(error);
-      return jsonError(message, message === 'YOUTUBE_TRANSCRIPT_API_KEY is not configured.' ? 503 : 400);
+      if (error instanceof StoryCreationError) {
+        switch (error.code) {
+          case 'INVALID_URL':
+            return jsonError('Invalid YouTube URL.', 400);
+          case 'MISSING_CONFIGURATION':
+            return jsonError('YOUTUBE_TRANSCRIPT_API_KEY is not configured.', 503);
+          case 'PROVIDER_FAILED':
+            return jsonError('Transcript provider request failed.', 502);
+        }
+      }
+      return jsonError('Story creation failed.', 500);
     }
   };
 }
