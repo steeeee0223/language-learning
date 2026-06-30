@@ -4,7 +4,7 @@ import { learningSettingsSchema, normalizedTranscriptSchema, videoMetadataSchema
 import { generationErrorCodeSchema, modelPresetSchema } from '@/lib/generation-contracts';
 
 export const TASK_SCHEMA_VERSION = 3 as const;
-export const LESSON_SKILL_VERSION = '3' as const;
+export const LESSON_SKILL_VERSION = '4' as const;
 export const requiredLessonSections = ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'] as const;
 
 export const generationMetadataSchema = z.strictObject({

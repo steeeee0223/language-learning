@@ -14,6 +14,47 @@ import {
 import type { StoredTask } from '@/lib/server/task-schema.ts';
 
 const text = z.string().catch(() => '');
+const requiredText = z.string().refine((value) => value.trim().length > 0, 'Expected non-empty text');
+
+const generatedExampleSchema = z.strictObject({
+  source: requiredText,
+  translation: requiredText,
+});
+const generatedVocabItemSchema = z.strictObject({
+  source: requiredText,
+  translation: requiredText,
+  usage: requiredText,
+});
+const generatedGrammarItemSchema = z.strictObject({
+  title: requiredText,
+  explanation: requiredText,
+  examples: z.array(generatedExampleSchema).min(1),
+});
+const generatedSpokenUsageItemSchema = z.strictObject({
+  title: requiredText,
+  explanation: requiredText,
+  examples: z.array(generatedExampleSchema).min(1),
+});
+const generatedLessonSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  video: z.strictObject({
+    id: requiredText,
+    title: requiredText,
+    translatedTitle: requiredText,
+  }),
+  lesson: z.strictObject({
+    targetLanguage: targetLanguageSchema,
+    cefrLevels: z.array(cefrLevelSchema).min(1),
+    transcriptSource: requiredText,
+    focus: requiredText,
+  }),
+  transcripts: z.array(
+    z.strictObject({ time: requiredText, source: requiredText, translation: requiredText }),
+  ),
+  vocabs: z.record(z.string(), z.array(generatedVocabItemSchema).min(1)),
+  grammars: z.record(z.string(), z.array(generatedGrammarItemSchema).min(1)),
+  spokenUsage: z.array(generatedSpokenUsageItemSchema).min(1),
+});
 
 const transcriptSchema = z
   .object({ time: text, source: text, translation: text })
@@ -184,26 +225,31 @@ export function formatTimestamp(seconds: number) {
 
 export function parseGeneratedLesson(raw: string, task: StoredTask): LessonContent {
   const cefrLevels = orderCefrLevels(task.learningSettings.cefrLevels);
-  const fallback = createFallbackLesson({
-    video: { id: task.video.id, title: task.video.title },
-    targetLanguage: task.learningSettings.targetLanguage,
-    cefrLevels,
-    transcriptSource: task.transcript.source,
-    transcripts: task.transcript.segments.map((segment) => ({
-      time: formatTimestamp(segment.start),
-      source: segment.text,
-      translation: segment.text,
-    })),
-  });
-
   let value: unknown;
   try {
     value = JSON.parse(raw);
-  } catch {
-    return fallback;
+  } catch (cause) {
+    throw new Error('Generated lesson is not valid JSON.', { cause });
   }
 
-  const parsed = parseLessonValue(value, fallback);
+  const result = generatedLessonSchema.safeParse(value);
+  if (!result.success) {
+    throw new Error('Generated lesson does not match the lesson contract.', {
+      cause: result.error,
+    });
+  }
+  const parsed = result.data;
+  const expectedLevels = JSON.stringify(cefrLevels);
+  if (
+    JSON.stringify(Object.keys(parsed.vocabs)) !== expectedLevels ||
+    JSON.stringify(Object.keys(parsed.grammars)) !== expectedLevels
+  ) {
+    throw new Error('Generated lesson does not match the lesson contract: CEFR sections are incomplete.');
+  }
+  if (parsed.transcripts.length !== task.transcript.segments.length) {
+    throw new Error('Generated lesson does not match the lesson contract: transcript count differs.');
+  }
+
   const vocabs: LessonContent['vocabs'] = {};
   const grammars: LessonContent['grammars'] = {};
 

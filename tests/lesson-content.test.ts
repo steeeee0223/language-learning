@@ -158,40 +158,11 @@ describe('lessonToPlainText', () => {
 });
 
 describe('parseGeneratedLesson', () => {
-  it('returns a task-derived fallback when the generated JSON is malformed', () => {
-    assert.deepEqual(parseGeneratedLesson('{not JSON', task), {
-      schemaVersion: 1,
-      video: {
-        id: 'jNQXAC9IVRw',
-        title: 'Me at the zoo',
-        translatedTitle: 'Me at the zoo',
-      },
-      lesson: {
-        targetLanguage: 'zh',
-        cefrLevels: ['A2', 'B1'],
-        transcriptSource: 'youtube-transcript.io',
-        focus: '',
-      },
-      transcripts: [
-        { time: '00:00', source: 'Here we are.', translation: 'Here we are.' },
-        {
-          time: '01:05',
-          source: 'The cool thing is these guys.',
-          translation: 'The cool thing is these guys.',
-        },
-        {
-          time: '02:05',
-          source: 'That is pretty much all there is to say.',
-          translation: 'That is pretty much all there is to say.',
-        },
-      ],
-      vocabs: {},
-      grammars: {},
-      spokenUsage: [],
-    });
+  it('rejects malformed generated JSON instead of returning fallback content', () => {
+    assert.throws(() => parseGeneratedLesson('{not JSON', task), /valid JSON/i);
   });
 
-  it('preserves valid pedagogical sections when trusted metadata containers are malformed', () => {
+  it('rejects malformed containers instead of repairing generated content', () => {
     const pedagogicalSections = {
       transcripts: [{ time: '99:99', source: 'Override.', translation: '我們到了。' }],
       vocabs: { A2: [{ source: 'zoo', translation: '動物園', usage: 'noun' }] },
@@ -216,40 +187,36 @@ describe('parseGeneratedLesson', () => {
       { lesson: validLesson },
       { video: validVideo },
     ]) {
-      const result = parseGeneratedLesson(
-        JSON.stringify({ schemaVersion: 1, ...metadata, ...pedagogicalSections }),
-        task,
+      assert.throws(
+        () =>
+          parseGeneratedLesson(
+            JSON.stringify({ schemaVersion: 1, ...metadata, ...pedagogicalSections }),
+            task,
+          ),
+        /lesson contract/i,
       );
-
-      assert.equal(result.transcripts[0]?.translation, '我們到了。');
-      assert.deepEqual(result.vocabs, pedagogicalSections.vocabs);
-      assert.deepEqual(result.grammars, pedagogicalSections.grammars);
-      assert.deepEqual(result.spokenUsage, pedagogicalSections.spokenUsage);
     }
   });
 
-  it('strips invalid CEFR keys without discarding valid requested-level siblings', () => {
-    const result = parseGeneratedLesson(
-      JSON.stringify({
-        ...fallback,
-        vocabs: {
-          A2: [{ source: 'zoo', translation: '動物園', usage: 'noun' }],
-          D1: [{ source: 'invalid', translation: '無效', usage: 'ignored' }],
-        },
-        grammars: {
-          B1: [{ title: 'The thing is', explanation: 'Introduces a point.', examples: [] }],
-          D1: [{ title: 'Invalid', explanation: 'Ignored.', examples: [] }],
-        },
-      }),
-      task,
+  it('rejects missing or unrequested CEFR teaching sections', () => {
+    assert.throws(
+      () =>
+        parseGeneratedLesson(
+          JSON.stringify({
+            ...fallback,
+            vocabs: {
+              A2: [{ source: 'zoo', translation: '動物園', usage: 'noun' }],
+              D1: [{ source: 'invalid', translation: '無效', usage: 'ignored' }],
+            },
+            grammars: {
+              B1: [{ title: 'The thing is', explanation: 'Introduces a point.', examples: [] }],
+              D1: [{ title: 'Invalid', explanation: 'Ignored.', examples: [] }],
+            },
+          }),
+          task,
+        ),
+      /lesson contract/i,
     );
-
-    assert.deepEqual(result.vocabs, {
-      A2: [{ source: 'zoo', translation: '動物園', usage: 'noun' }],
-    });
-    assert.deepEqual(result.grammars, {
-      B1: [{ title: 'The thing is', explanation: 'Introduces a point.', examples: [] }],
-    });
   });
 
   it('normalizes model content around trusted task fields', () => {
@@ -276,19 +243,28 @@ describe('parseGeneratedLesson', () => {
         },
         transcripts: [
           { time: '99:99', source: 'Overridden source.', translation: '我們到了。' },
-          { time: '88:88', source: 'Another override.', translation: '   ' },
+          { time: '88:88', source: 'Another override.', translation: '有趣的是這些傢伙。' },
           { time: '77:77', source: 'Extra source.', translation: '額外翻譯。' },
-          { time: '66:66', source: 'Ignored extra.', translation: '忽略。' },
         ],
         vocabs: {
-          B1: [{ source: 'cool', translation: '很棒', usage: 'informal adjective' }],
           A2: [{ source: 'zoo', translation: '動物園', usage: 'noun' }],
-          C2: [{ source: 'unexpected', translation: '不應保留', usage: 'ignored' }],
+          B1: [{ source: 'cool', translation: '很棒', usage: 'informal adjective' }],
         },
         grammars: {
-          B1: [{ title: 'The thing is', explanation: 'Introduces a point.', examples: [] }],
-          A2: [{ title: 'Here we are', explanation: 'Signals arrival.', examples: [] }],
-          C2: [{ title: 'Unexpected', explanation: 'Ignored.', examples: [] }],
+          A2: [
+            {
+              title: 'Here we are',
+              explanation: 'Signals arrival.',
+              examples: [{ source: 'Here we are.', translation: '我們到了。' }],
+            },
+          ],
+          B1: [
+            {
+              title: 'The thing is',
+              explanation: 'Introduces a point.',
+              examples: [{ source: 'The cool thing is these guys.', translation: '有趣的是這些傢伙。' }],
+            },
+          ],
         },
         spokenUsage,
       }),
@@ -311,7 +287,7 @@ describe('parseGeneratedLesson', () => {
       {
         time: '01:05',
         source: 'The cool thing is these guys.',
-        translation: 'The cool thing is these guys.',
+        translation: '有趣的是這些傢伙。',
       },
       {
         time: '02:05',
@@ -326,8 +302,22 @@ describe('parseGeneratedLesson', () => {
     });
     assert.deepEqual(Object.keys(result.grammars), ['A2', 'B1']);
     assert.deepEqual(result.grammars, {
-      A2: [{ title: 'Here we are', explanation: 'Signals arrival.', examples: [] }],
-      B1: [{ title: 'The thing is', explanation: 'Introduces a point.', examples: [] }],
+      A2: [
+        {
+          title: 'Here we are',
+          explanation: 'Signals arrival.',
+          examples: [{ source: 'Here we are.', translation: '我們到了。' }],
+        },
+      ],
+      B1: [
+        {
+          title: 'The thing is',
+          explanation: 'Introduces a point.',
+          examples: [
+            { source: 'The cool thing is these guys.', translation: '有趣的是這些傢伙。' },
+          ],
+        },
+      ],
     });
     assert.deepEqual(result.spokenUsage, spokenUsage);
   });

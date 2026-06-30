@@ -78,7 +78,7 @@ test('buildTaskFile writes the versioned local task contract and returns its slu
   assert.deepEqual(task.learningSettings.cefrLevels, ['A2', 'B1']);
   assert.deepEqual(task.output, { format: 'json', path: result.outputPath });
   assert.deepEqual(task.instructions.requiredSections, ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage']);
-  assert.deepEqual(task.generation, { status: 'pending', skillVersion: '3' });
+  assert.deepEqual(task.generation, { status: 'pending', skillVersion: '4' });
 });
 
 test('lesson helpers list and read only regular JSON lesson files', async () => {

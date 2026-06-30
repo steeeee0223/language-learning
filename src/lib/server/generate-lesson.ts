@@ -135,7 +135,17 @@ export async function generateLesson(
     });
     generatedContent = content;
     throwIfGenerationAborted(generationSignal);
-    const lesson = parseGeneratedLesson(content, task);
+    stage = 'validation';
+    let lesson;
+    try {
+      lesson = parseGeneratedLesson(content, task);
+    } catch (cause) {
+      throw new GenerationError(
+        'GENERATION_INVALID',
+        'The generated lesson is incomplete or invalid.',
+        { cause },
+      );
+    }
     const normalizedContent = `${JSON.stringify(lesson, null, 2)}\n`;
     throwIfGenerationAborted(generationSignal);
     stage = 'write';

@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { generateLesson } from '@/lib/server/generate-lesson.ts';
 import { GenerationError } from '@/lib/server/generation-errors.ts';
+import { buildLessonPrompt } from '@/lib/server/lesson-prompt.ts';
 import { ensureLocalDirs } from '@/lib/server/local-paths.ts';
 import { readTask } from '@/lib/server/task-store.ts';
 import { buildTaskFile } from '@/lib/server/tasks.ts';
@@ -43,6 +44,19 @@ async function createStoredTaskFixture(options?: {
 
 const getReadyStatus = async () => ({ status: 'ready' as const, version: 'codex-cli test' });
 
+describe('buildLessonPrompt', () => {
+  it('requires complete translated and pedagogical content while allowing skill references to be read', async () => {
+    const rootDir = await createStoredTaskFixture();
+    const prompt = buildLessonPrompt(await readTask('lesson', rootDir));
+
+    assert.match(prompt, /read-only commands.*skill references/i);
+    assert.match(prompt, /translate every transcript segment/i);
+    assert.match(prompt, /at least one vocabulary and grammar item.*requested CEFR level/i);
+    assert.match(prompt, /at least one spoken-usage item/i);
+    assert.doesNotMatch(prompt, /Do not browse, run commands, or modify files/);
+  });
+});
+
 describe('lesson persistence and generation coordination', () => {
   it('atomically creates a lesson and refuses overwrite', async () => {
     const rootDir = await mkdtemp(join(tmpdir(), 'lesson-writer-'));
@@ -70,47 +84,73 @@ describe('lesson persistence and generation coordination', () => {
     assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'), expected);
   });
 
-  it('publishes a task-derived fallback when generated JSON is invalid', async () => {
+  it('rejects invalid JSON without publishing a fallback lesson', async () => {
     const rootDir = await createStoredTaskFixture();
-    await generateLesson(
-      { slug: 'lesson', modelPreset: 'best', rootDir },
-      {
-        generator: { generate: async () => '# invalid' },
-        getStatus: getReadyStatus,
+    const rawResponse = '# invalid';
+
+    await assert.rejects(
+      () =>
+        generateLesson(
+          { slug: 'lesson', modelPreset: 'best', rootDir },
+          {
+            generator: { generate: async () => rawResponse },
+            getStatus: getReadyStatus,
+          },
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof GenerationError);
+        assert.equal(error.code, 'GENERATION_INVALID');
+        assert.match(error.diagnosticsPath ?? '', /^\.local\/errors\/lesson\/[^/]+\/error\.json$/);
+        return true;
       },
     );
 
-    const published = JSON.parse(
-      await readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'),
+    await assert.rejects(
+      () => readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'),
+      /ENOENT/,
     );
-    assert.deepEqual(published, {
-      schemaVersion: 1,
-      video: {
-        id: 'jNQXAC9IVRw',
-        title: 'Me at the zoo',
-        translatedTitle: 'Me at the zoo',
-      },
-      lesson: {
-        targetLanguage: 'zh',
-        cefrLevels: ['A2', 'B1'],
-        transcriptSource: 'youtube-transcript.io',
-        focus: '',
-      },
-      transcripts: [
-        {
-          time: '00:00',
-          source: 'Here we are at the zoo.',
-          translation: 'Here we are at the zoo.',
-        },
-      ],
-      vocabs: {},
-      grammars: {},
-      spokenUsage: [],
-    });
-    assert.equal((await readTask('lesson', rootDir)).generation.status, 'succeeded');
+    const attempts = await readdir(join(rootDir, '.local/errors/lesson'));
+    assert.equal(attempts.length, 1);
+    assert.equal(
+      await readFile(join(rootDir, '.local/errors/lesson', attempts[0]!, 'generated.json'), 'utf8'),
+      rawResponse,
+    );
+    const generation = (await readTask('lesson', rootDir)).generation;
+    assert.equal(generation.status, 'failed');
+    assert.equal(generation.errorCode, 'GENERATION_INVALID');
   });
 
-  it('preserves valid generated pedagogy while catching malformed sections', async () => {
+  it('rejects syntactically valid lessons with empty required teaching sections', async () => {
+    const rootDir = await createStoredTaskFixture();
+    const generated = JSON.parse(
+      await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8'),
+    );
+    generated.vocabs = {};
+    generated.grammars = {};
+    generated.spokenUsage = [];
+
+    await assert.rejects(
+      () =>
+        generateLesson(
+          { slug: 'lesson', modelPreset: 'best', rootDir },
+          {
+            generator: { generate: async () => JSON.stringify(generated) },
+            getStatus: getReadyStatus,
+          },
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof GenerationError);
+        assert.equal(error.code, 'GENERATION_INVALID');
+        return true;
+      },
+    );
+    await assert.rejects(
+      () => readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'),
+      /ENOENT/,
+    );
+  });
+
+  it('rejects malformed generated sections instead of repairing them', async () => {
     const rootDir = await createStoredTaskFixture();
     const generated = JSON.parse(
       await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8'),
@@ -119,24 +159,21 @@ describe('lesson persistence and generation coordination', () => {
     generated.vocabs.A2.push(false);
     generated.spokenUsage = false;
 
-    await generateLesson(
-      { slug: 'lesson', modelPreset: 'best', rootDir },
-      {
-        generator: { generate: async () => JSON.stringify(generated) },
-        getStatus: getReadyStatus,
+    await assert.rejects(
+      () =>
+        generateLesson(
+          { slug: 'lesson', modelPreset: 'best', rootDir },
+          {
+            generator: { generate: async () => JSON.stringify(generated) },
+            getStatus: getReadyStatus,
+          },
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof GenerationError);
+        assert.equal(error.code, 'GENERATION_INVALID');
+        return true;
       },
     );
-
-    const published = JSON.parse(
-      await readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'),
-    );
-    assert.equal(published.video.translatedTitle, 'Me at the zoo');
-    assert.deepEqual(published.vocabs.A2, [
-      { source: 'zoo', translation: '動物園', usage: '表示展示動物的場所。' },
-      { source: '', translation: '', usage: '' },
-    ]);
-    assert.equal(published.grammars.B1[0].title, 'behind me');
-    assert.deepEqual(published.spokenUsage, []);
   });
 
   it('writes error details when generation fails before returning content', async () => {
