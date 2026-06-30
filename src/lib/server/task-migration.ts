@@ -171,7 +171,7 @@ async function readCandidate(slug: string, tasksDir: string) {
   const source = await readRegularFile(join(tasksDir, `${slug}.json`));
   const value: unknown = JSON.parse(source);
   const current = storedTaskSchema.safeParse(value);
-  if (current.success && current.data.id === slug) return { current: true as const };
+  if (current.success) return { current: true as const };
   const legacy = legacyStoredTaskSchema.safeParse(value);
   if (!legacy.success) return { malformed: true as const };
   return { candidate: { slug, task: legacy.data, source } satisfies LegacyCandidate };

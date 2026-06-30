@@ -91,6 +91,21 @@ test('migrates a legacy task without changing its slug or lesson content', async
   assert.deepEqual(await migrateLegacyTasks(rootDir), { migrated: 0, conflicts: [] });
 });
 
+test('preserves a historical generation skill version during migration', async () => {
+  const { migrateLegacyTasks } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-skill-version-');
+  await writeTask(rootDir, 'historical', legacyTask('historical', {
+    generation: { status: 'succeeded', skillVersion: '3', modelPreset: 'best' },
+  }));
+
+  assert.deepEqual(await migrateLegacyTasks(rootDir), { migrated: 1, conflicts: [] });
+  const migrated = JSON.parse(
+    await readFile(join(rootDir, '.local', 'tasks', 'historical.json'), 'utf8'),
+  );
+  assert.equal(migrated.generation.skillVersion, '3');
+  assert.equal('modelPreset' in migrated.generation, false);
+});
+
 test('orders legacy tasks oldest first and converges identical sources on one story', async () => {
   const { migrateLegacyTasks } = await import('@/lib/server/task-migration.ts');
   const rootDir = await localRoot('task-migration-order-');
@@ -150,6 +165,19 @@ test('skips v4 and non-regular entries and reports malformed JSON without deleti
   });
   assert.equal(await readFile(join(rootDir, '.local', 'tasks', 'malformed.json'), 'utf8'), '{not json');
   assert.equal(JSON.parse(await readFile(join(rootDir, '.local', 'tasks', 'current.json'), 'utf8')).schemaVersion, 4);
+});
+
+test('skips a schema-valid v4 task whose ID differs from its filename', async () => {
+  const { migrateLegacyTasks } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-v4-id-mismatch-');
+  const original = `${JSON.stringify(v4Task('embedded-id'), null, 2)}\n`;
+  await writeFile(join(rootDir, '.local', 'tasks', 'filename-id.json'), original);
+
+  assert.deepEqual(await migrateLegacyTasks(rootDir), { migrated: 0, conflicts: [] });
+  assert.equal(
+    await readFile(join(rootDir, '.local', 'tasks', 'filename-id.json'), 'utf8'),
+    original,
+  );
 });
 
 test('rejects a mismatched output path without rewriting the legacy task', async () => {

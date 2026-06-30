@@ -14,7 +14,7 @@ export const requiredLessonSections = ['metadata', 'translation', 'vocabulary', 
 
 export const generationMetadataSchema = z.strictObject({
   status: z.enum(['pending', 'succeeded', 'failed']),
-  skillVersion: z.literal(LESSON_SKILL_VERSION),
+  skillVersion: z.string().min(1),
   requestedModel: z.string().min(1).optional(),
   codexVersion: z.string().min(1).optional(),
   startedAt: z.iso.datetime().optional(),
