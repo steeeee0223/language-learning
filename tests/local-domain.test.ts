@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { lessonSchema, type LessonContent } from '@/lib/lesson-content.ts';
-import { parseYouTubeVideoId } from '@/lib/youtube.ts';
+import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/youtube.ts';
 import { buildTaskFile } from '@/lib/server/tasks.ts';
 import { listLessons, readLesson } from '@/lib/server/lessons.ts';
 import { fetchTranscriptBundle } from '@/lib/server/transcripts.ts';
@@ -33,6 +33,13 @@ test('parseYouTubeVideoId accepts common YouTube URL shapes', () => {
   assert.equal(parseYouTubeVideoId('https://youtu.be/jNQXAC9IVRw?t=12'), 'jNQXAC9IVRw');
   assert.equal(parseYouTubeVideoId('https://www.youtube.com/shorts/jNQXAC9IVRw'), 'jNQXAC9IVRw');
   assert.equal(parseYouTubeVideoId('https://www.youtube.com/embed/jNQXAC9IVRw'), 'jNQXAC9IVRw');
+});
+
+test('isYouTubeVideoId recognizes only valid YouTube video IDs', () => {
+  assert.equal(isYouTubeVideoId('jNQXAC9IVRw'), true);
+  assert.equal(isYouTubeVideoId(''), false);
+  assert.equal(isYouTubeVideoId('too-short'), false);
+  assert.equal(isYouTubeVideoId('jNQXAC9IVR!'), false);
 });
 
 test('parseYouTubeVideoId rejects non-YouTube and malformed inputs', () => {

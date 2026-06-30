@@ -69,7 +69,7 @@ Generated local artifacts are intentionally gitignored:
   errors/
 ```
 
-`.local/tasks` contains local task JSON, and `.local/lessons` contains generated lesson JSON. A failed generation with no returned content is written to `.local/errors/<task-id>.json`. When Codex returns rejected content, the attempt is written to `.local/errors/<task-id>/<attempt>/` with `error.json` and `generated.json`. Codex credentials are not stored under `.local`.
+`.local/tasks` contains local task JSON, and `.local/lessons` contains generated lesson JSON. A failed generation with no returned content is written to `.local/errors/<task-id>.json`. When a failure occurs after Codex returns content, such as a publication failure, the attempt is written to `.local/errors/<task-id>/<attempt>/` with `error.json` and `generated.json`. Codex credentials are not stored under `.local`.
 
 For tests or isolated local runs, set `LOCAL_DATA_ROOT` to another directory.
 

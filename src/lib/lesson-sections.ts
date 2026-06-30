@@ -44,6 +44,8 @@ export const lessonLabels = {
     translation: 'Translation',
     usage: 'Usage',
     examples: 'Examples',
+    untitled: 'Untitled lesson',
+    noVideo: 'No video available.',
     noContent: 'No content available.',
   },
   zh: {
@@ -59,6 +61,8 @@ export const lessonLabels = {
     translation: '翻譯',
     usage: '用法',
     examples: '例句',
+    untitled: '未命名課程',
+    noVideo: '目前沒有影片。',
     noContent: '目前沒有內容。',
   },
 } as const satisfies Record<TargetLanguage, Record<string, string>>;

@@ -12,6 +12,7 @@ import {
   lessonSpokenUsageItemId,
   orderCefrLevels,
 } from '@/lib/lesson-sections';
+import { isYouTubeVideoId } from '@/lib/youtube';
 
 type LessonProps = {
   content: LessonContent;
@@ -86,13 +87,20 @@ export function Lesson({ content, intro }: LessonProps) {
   const labels = lessonLabels[language];
   const sectionLabels = lessonSectionLabels[language];
   const levels = orderCefrLevels(content.lesson.cefrLevels);
+  const hasVideo = isYouTubeVideoId(content.video.id);
+  const title =
+    content.video.translatedTitle.trim() || content.video.title.trim() || labels.untitled;
   const videoUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(content.video.id)}`;
 
   return (
     <article>
-      <h1 id="lesson-title">{content.video.translatedTitle}</h1>
+      <h1 id="lesson-title">{title}</h1>
       {intro}
-      <YouTubeEmbed videoId={content.video.id} title={content.video.title} />
+      {hasVideo ? (
+        <YouTubeEmbed videoId={content.video.id} title={content.video.title.trim() || title} />
+      ) : (
+        <p>{labels.noVideo}</p>
+      )}
 
       <section aria-labelledby={lessonSectionIds.metadata}>
         <h2 id={lessonSectionIds.metadata}>{sectionLabels.metadata}</h2>
@@ -101,7 +109,7 @@ export function Lesson({ content, intro }: LessonProps) {
           <dd>{content.video.title}</dd>
           <dt>{labels.video}</dt>
           <dd>
-            <a href={videoUrl}>{videoUrl}</a>
+            {hasVideo ? <a href={videoUrl}>{videoUrl}</a> : labels.noVideo}
           </dd>
           <dt>{labels.videoId}</dt>
           <dd>{content.video.id}</dd>
@@ -118,26 +126,30 @@ export function Lesson({ content, intro }: LessonProps) {
 
       <section aria-labelledby={lessonSectionIds.translation}>
         <h2 id={lessonSectionIds.translation}>{sectionLabels.translation}</h2>
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">{labels.time}</th>
-              <th scope="col">{labels.source}</th>
-              <th scope="col">{labels.translation}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {content.transcripts.map((transcript, index) => (
-              <tr
-                key={`${transcript.time}:${transcript.source}:${transcript.translation}:${index}`}
-              >
-                <td>{transcript.time}</td>
-                <td>{transcript.source}</td>
-                <td>{transcript.translation}</td>
+        {content.transcripts.length === 0 ? (
+          <p>{labels.noContent}</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">{labels.time}</th>
+                <th scope="col">{labels.source}</th>
+                <th scope="col">{labels.translation}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {content.transcripts.map((transcript, index) => (
+                <tr
+                  key={`${transcript.time}:${transcript.source}:${transcript.translation}:${index}`}
+                >
+                  <td>{transcript.time}</td>
+                  <td>{transcript.source}</td>
+                  <td>{transcript.translation}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
 
       {levels.map((level) => {
