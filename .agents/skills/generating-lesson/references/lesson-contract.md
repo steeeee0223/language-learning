@@ -14,7 +14,7 @@ Return exactly one JSON object with the following shape and semantics. Include e
   },
   "lesson": {
     "targetLanguage": "zh",
-    "cefrLevels": ["A2", "B1"],
+    "cefrLevels": ["A2"],
     "transcriptSource": "string",
     "focus": "string"
   },
@@ -26,7 +26,7 @@ Return exactly one JSON object with the following shape and semantics. Include e
     }
   ],
   "vocabs": {
-    "REQUESTED_CEFR_LEVEL": [
+    "A2": [
       {
         "source": "string",
         "translation": "string",
@@ -35,7 +35,7 @@ Return exactly one JSON object with the following shape and semantics. Include e
     ]
   },
   "grammars": {
-    "REQUESTED_CEFR_LEVEL": [
+    "A2": [
       {
         "title": "string",
         "explanation": "string",
