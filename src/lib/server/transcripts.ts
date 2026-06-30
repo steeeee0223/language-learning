@@ -1,4 +1,4 @@
-import type { NormalizedTranscript, TranscriptSegment, VideoMetadata } from '../contracts.ts';
+import type { TranscriptBundle, TranscriptSegment } from '../contracts.ts';
 import { parseYouTubeVideoId } from '../youtube.ts';
 
 const TRANSCRIPT_ENDPOINT = 'https://www.youtube-transcript.io/api/transcripts';
@@ -9,10 +9,7 @@ type FetchTranscriptBundleInput = {
   fetchFn?: typeof fetch;
 };
 
-type TranscriptBundle = {
-  video: VideoMetadata;
-  transcript: NormalizedTranscript;
-};
+
 
 type RawSegment = {
   text?: unknown;
@@ -122,7 +119,8 @@ async function fetchTranscriptPayload(videoId: string, apiKey: string, fetchFn: 
   return readJson(response);
 }
 
-export async function fetchTranscriptBundle(input: FetchTranscriptBundleInput): Promise<TranscriptBundle> {
+export async function fetchTranscriptBundle(input: FetchTranscriptBundleInput): Promise<TranscriptBundle
+> {
   const videoId = parseYouTubeVideoId(input.url);
   const fetchFn = input.fetchFn ?? fetch;
   const [title, transcriptPayload] = await Promise.all([

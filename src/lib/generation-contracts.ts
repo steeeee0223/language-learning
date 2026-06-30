@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const modelPresets = ['auto', 'fast', 'best'] as const;
+ const modelPresets = ['auto', 'fast', 'best'] as const;
 export const modelPresetSchema = z.enum(modelPresets);
 export const localSlugSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/);
 
@@ -25,7 +25,7 @@ export const generateLessonResponseSchema = z.strictObject({
   lessonPath: z.string().startsWith('.local/lessons/'),
 });
 
-export const generationErrorCodes = [
+const generationErrorCodes = [
   'CODEX_NOT_INSTALLED',
   'CODEX_NOT_AUTHENTICATED',
   'MODEL_UNAVAILABLE',

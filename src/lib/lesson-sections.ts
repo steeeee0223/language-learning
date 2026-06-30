@@ -3,15 +3,11 @@ import type { TOCItemType } from 'fumadocs-core/toc';
 import { cefrLevels, type CefrLevel, type TargetLanguage } from '@/lib/contracts';
 import type { LessonContent } from '@/lib/lesson-content';
 
-export const lessonSectionKeys = [
-  'metadata',
-  'translation',
-  'vocabulary',
-  'grammar',
-  'spokenUsage',
-] as const;
-
-export type LessonSection = (typeof lessonSectionKeys)[number];
+type LessonSection = 'metadata'|
+  'translation'|
+  'vocabulary'|
+  'grammar'|
+  'spokenUsage'
 
 export const lessonSectionLabels = {
   en: {
@@ -91,19 +87,6 @@ export function lessonGrammarItemId(level: CefrLevel, index: number) {
 
 export function lessonSpokenUsageItemId(index: number) {
   return `spoken-usage-${index + 1}`;
-}
-
-export function lessonSectionHeadings(language: TargetLanguage, levels: readonly CefrLevel[]) {
-  const labels = lessonSectionLabels[language];
-  return [
-    labels.metadata,
-    labels.translation,
-    ...orderCefrLevels(levels).flatMap((level) => [
-      `${level} ${labels.vocabulary}`,
-      `${level} ${labels.grammar}`,
-    ]),
-    labels.spokenUsage,
-  ];
 }
 
 export function createLessonToc(content: LessonContent): TOCItemType[] {
