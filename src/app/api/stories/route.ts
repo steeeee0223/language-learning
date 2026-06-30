@@ -7,7 +7,7 @@ import { fetchTranscriptBundle } from '../../../lib/server/transcripts.ts';
 import { getErrorMessage, jsonError } from '../../../lib/server/http.ts';
 import { storyResponseSchema } from '../../../lib/task-contracts.ts';
 
-const createStoryRequestSchema = z.strictObject({ url: z.string().min(1) });
+const createStoryRequestSchema = z.strictObject({ url: z.url() });
 
 type StoriesPostDependencies = {
   rootDir?: string;

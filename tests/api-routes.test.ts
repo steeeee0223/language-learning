@@ -105,6 +105,27 @@ test('POST /api/stories creates then reuses a transcript-free story response', a
   assert.equal(fetchCount, 1);
 });
 
+test('POST /api/stories rejects a non-URL before fetching a transcript', async () => {
+  let fetchCount = 0;
+  const postStory = createStoriesPostHandler({
+    fetchBundle: async () => {
+      fetchCount += 1;
+      throw new Error('Transcript fetch must not run.');
+    },
+  });
+
+  const response = await postStory(
+    new Request('http://localhost/api/stories', {
+      method: 'POST',
+      body: JSON.stringify({ url: 'not a URL' }),
+    }),
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'Invalid story payload.' });
+  assert.equal(fetchCount, 0);
+});
+
 test('GET /api/lessons lists JSON lessons and detail returns structured content', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-lessons-'));
   process.env.LOCAL_DATA_ROOT = rootDir;
