@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, rename, unlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -35,7 +36,7 @@ export async function updateTaskGeneration(
   const next = storedTaskSchema.parse({ ...current, generation: generationMetadataSchema.parse(generation) });
   const { tasksDir } = await ensureLocalDirs(rootDir);
   const finalPath = join(tasksDir, `${slug}.json`);
-  const tempPath = join(tasksDir, `.${slug}.${process.pid}.${Date.now()}.tmp`);
+  const tempPath = join(tasksDir, `.${slug}.${process.pid}.${randomUUID()}.tmp`);
 
   try {
     await writeFile(tempPath, `${JSON.stringify(next, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });

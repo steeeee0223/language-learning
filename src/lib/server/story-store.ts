@@ -31,6 +31,7 @@ type CreateOrReuseStoryInput = {
 };
 
 type StoryCreationErrorCode = 'INVALID_URL' | 'MISSING_CONFIGURATION' | 'PROVIDER_FAILED';
+type StoryStoreErrorCode = 'STORY_NOT_FOUND';
 
 export class StoryCreationError extends Error {
   constructor(
@@ -39,6 +40,16 @@ export class StoryCreationError extends Error {
   ) {
     super('Story creation failed.', options);
     this.name = 'StoryCreationError';
+  }
+}
+
+export class StoryStoreError extends Error {
+  constructor(
+    readonly code: StoryStoreErrorCode,
+    options?: ErrorOptions,
+  ) {
+    super('Story store operation failed.', options);
+    this.name = 'StoryStoreError';
   }
 }
 
@@ -200,7 +211,7 @@ export async function readStory(id: string, rootDir?: string): Promise<Story> {
 
   const found = await findStory(id, rootDir);
   if (!found) {
-    throw new Error(`Story ${id} does not exist.`);
+    throw new StoryStoreError('STORY_NOT_FOUND');
   }
   return found.story;
 }

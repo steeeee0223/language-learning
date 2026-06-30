@@ -7,7 +7,7 @@ import test from 'node:test';
 import { lessonSchema, type LessonContent } from '@/lib/lesson-content.ts';
 import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/youtube.ts';
 import { buildTaskFile, TaskCreationError } from '@/lib/server/tasks.ts';
-import { readTask } from '@/lib/server/task-store.ts';
+import { readTask, updateTaskGeneration } from '@/lib/server/task-store.ts';
 import { listLessons, readLesson } from '@/lib/server/lessons.ts';
 import { fetchTranscriptBundle } from '@/lib/server/transcripts.ts';
 
@@ -162,6 +162,37 @@ test('task creation retries an ID collision without overwriting the existing tas
 
   assert.equal(result.taskId, 'replacement-id');
   assert.equal(await readFile(join(rootDir, '.local', 'tasks', 'same-id.json'), 'utf8'), original);
+});
+
+test('concurrent generation updates use distinct temporary publication paths', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-task-update-concurrent-'));
+  await writeStoryFixture(rootDir);
+  await buildTaskFile(
+    {
+      storyId: 'jNQXAC9IVRw',
+      learningSettings: { targetLanguage: 'en', cefrLevels: ['A1'] },
+      modelPreset: 'fast',
+    },
+    { rootDir, idGenerator: () => 'concurrent-task' },
+  );
+  const tasksDir = join(rootDir, '.local', 'tasks');
+  const fixedNow = 1_782_700_000_000;
+  const occupiedTempName = `.concurrent-task.${process.pid}.${fixedNow}.tmp`;
+  await writeFile(join(tasksDir, occupiedTempName), 'in-flight update');
+  const originalNow = Date.now;
+  Date.now = () => fixedNow;
+
+  try {
+    const updates = await Promise.all([
+      updateTaskGeneration('concurrent-task', { status: 'pending', skillVersion: '4' }, rootDir),
+      updateTaskGeneration('concurrent-task', { status: 'pending', skillVersion: '4' }, rootDir),
+    ]);
+
+    assert.equal(updates.length, 2);
+    assert.deepEqual((await readdir(tasksDir)).sort(), [occupiedTempName, 'concurrent-task.json'].sort());
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test('task creation requires its referenced story before writing', async () => {

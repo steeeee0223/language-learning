@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { taskCreationRequestSchema, type TaskCreationRequest } from '@/lib/contracts';
 import { localSlugSchema } from '@/lib/generation-contracts';
 import { ensureLocalDirs } from './local-paths.ts';
-import { readStory } from './story-store.ts';
+import { readStory, StoryStoreError } from './story-store.ts';
 import { LESSON_SKILL_VERSION, requiredLessonSections, storedTaskSchema, TASK_SCHEMA_VERSION } from './task-schema.ts';
 
 type BuildTaskFileDependencies = {
@@ -32,10 +32,6 @@ function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoExcept
   return error instanceof Error && 'code' in error && error.code === code;
 }
 
-function isMissingStory(error: unknown, storyId: string) {
-  return error instanceof Error && error.message === `Story ${storyId} does not exist.`;
-}
-
 export async function buildTaskFile(
   request: TaskCreationRequest,
   dependencies: BuildTaskFileDependencies = {},
@@ -44,7 +40,7 @@ export async function buildTaskFile(
   try {
     await readStory(input.storyId, dependencies.rootDir);
   } catch (error) {
-    if (isMissingStory(error, input.storyId)) {
+    if (error instanceof StoryStoreError && error.code === 'STORY_NOT_FOUND') {
       throw new TaskCreationError('STORY_NOT_FOUND', { cause: error });
     }
     throw error;

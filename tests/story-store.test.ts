@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { createOrReuseStory, readStory } from '@/lib/server/story-store.ts';
+import { createOrReuseStory, readStory, StoryStoreError } from '@/lib/server/story-store.ts';
 import type { Story } from '@/lib/server/story-schema.ts';
 
 const url = 'https://youtu.be/jNQXAC9IVRw';
@@ -79,6 +79,15 @@ test('createOrReuseStory writes and reads a validated story on the first request
   const persisted = JSON.parse(await readFile(result.storyPath, 'utf8'));
   assert.equal(persisted.schemaVersion, 1);
   assert.equal('learningSettings' in persisted, false);
+});
+
+test('readStory reports a missing story with a typed store error', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-story-missing-'));
+
+  await assert.rejects(
+    () => readStory('jNQXAC9IVRw', rootDir),
+    (error: unknown) => error instanceof StoryStoreError && error.code === 'STORY_NOT_FOUND',
+  );
 });
 
 test('createOrReuseStory reuses a stored story without fetching again', async () => {
