@@ -12,7 +12,7 @@ export default async function GetStartedPage() {
       <DocsPage toc={[]}>
         <DocsTitle>Get Started</DocsTitle>
         <DocsDescription>
-          Create a local task from a YouTube transcript, then run the suggested Codex command to produce the MDX lesson.
+          Prepare a lesson from a YouTube transcript, then generate it in the app with your signed-in Codex account.
         </DocsDescription>
         <DocsBody>
           <GetStartedClient />

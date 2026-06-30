@@ -1,5 +1,9 @@
 const VIDEO_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
 
+export function isYouTubeVideoId(value: string): boolean {
+  return VIDEO_ID_PATTERN.test(value);
+}
+
 export function parseYouTubeVideoId(input: string): string {
   let url: URL;
 
@@ -27,7 +31,7 @@ export function parseYouTubeVideoId(input: string): string {
     throw new Error('Enter a YouTube URL.');
   }
 
-  if (!videoId || !VIDEO_ID_PATTERN.test(videoId)) {
+  if (!videoId || !isYouTubeVideoId(videoId)) {
     throw new Error('The YouTube URL does not contain a valid video ID.');
   }
 
