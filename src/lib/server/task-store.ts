@@ -5,7 +5,13 @@ import { join } from 'node:path';
 
 import { localSlugSchema } from '@/lib/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
-import { generationMetadataSchema, storedTaskSchema, type GenerationMetadata, type StoredTask } from './task-schema';
+import { migrateLegacyTask } from './task-migration';
+import {
+  generationMetadataSchema,
+  storedTaskSchema,
+  type GenerationMetadata,
+  type StoredTask,
+} from './task-schema';
 
 function assertTaskSlug(slug: string) {
   localSlugSchema.parse(slug);
@@ -14,17 +20,27 @@ function assertTaskSlug(slug: string) {
 export async function readTask(slug: string, rootDir?: string): Promise<StoredTask> {
   assertTaskSlug(slug);
   const { tasksDir } = await ensureLocalDirs(rootDir);
+  const taskPath = join(tasksDir, `${slug}.json`);
   let file: FileHandle | undefined;
   try {
-    file = await open(join(tasksDir, `${slug}.json`), constants.O_RDONLY | constants.O_NOFOLLOW);
+    file = await open(taskPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     const stats = await file.stat();
     if (!stats.isFile()) throw new Error('Task path is not a regular file.');
-    const task = storedTaskSchema.parse(JSON.parse(await file.readFile('utf8')));
-    if (task.id !== slug) throw new Error('Stored task ID does not match its filename.');
-    return task;
+    const value: unknown = JSON.parse(await file.readFile('utf8'));
+    const current = storedTaskSchema.safeParse(value);
+    if (current.success) {
+      if (current.data.id !== slug) throw new Error('Stored task ID does not match its filename.');
+      return current.data;
+    }
   } finally {
     await file?.close();
   }
+
+  const result = await migrateLegacyTask(slug, rootDir);
+  if (result.migrated !== 1) {
+    throw new Error(`Legacy task migration failed: ${result.conflicts[0]?.reason ?? 'unknown'}.`);
+  }
+  return readTask(slug, rootDir);
 }
 
 export async function updateTaskGeneration(

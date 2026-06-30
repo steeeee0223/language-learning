@@ -33,6 +33,11 @@ type CreateOrReuseStoryInput = {
 type StoryCreationErrorCode = 'INVALID_URL' | 'MISSING_CONFIGURATION' | 'PROVIDER_FAILED';
 type StoryStoreErrorCode = 'STORY_NOT_FOUND';
 
+type PersistStoryIfAbsentInput = {
+  story: Story;
+  rootDir?: string;
+};
+
 export class StoryCreationError extends Error {
   constructor(
     readonly code: StoryCreationErrorCode,
@@ -214,6 +219,26 @@ export async function readStory(id: string, rootDir?: string): Promise<Story> {
     throw new StoryStoreError('STORY_NOT_FOUND');
   }
   return found.story;
+}
+
+export async function persistStoryIfAbsent(input: PersistStoryIfAbsentInput) {
+  const story = storySchema.parse(input.story);
+  const paths = await ensureLocalDirs(input.rootDir);
+  const storyPath = resolveStoryPath(paths.storiesDir, story.id);
+  const tempPath = resolve(paths.storiesDir, `.${story.id}.${process.pid}.${randomUUID()}.tmp`);
+
+  try {
+    await writeFile(tempPath, `${JSON.stringify(story, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+    try {
+      await link(tempPath, storyPath);
+      return { story, storyPath, created: true as const };
+    } catch (error) {
+      if (!hasErrorCode(error, 'EEXIST')) throw error;
+      return { story: await readStoryPath(storyPath, story.id), storyPath, created: false as const };
+    }
+  } finally {
+    await unlink(tempPath).catch(() => undefined);
+  }
 }
 
 export async function createOrReuseStory(input: CreateOrReuseStoryInput) {
