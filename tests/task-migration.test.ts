@@ -150,6 +150,36 @@ test('normalizes a flat legacy error while preserving existing nested diagnostic
   await assert.rejects(() => readFile(join(rootDir, '.local', 'errors', 'lesson.json'), 'utf8'), /ENOENT/);
 });
 
+test('keeps the flat diagnostic recoverable when migration fails before staging', async () => {
+  const { migrateLegacyTask } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-error-preparation-failure-');
+  const flatPath = join(rootDir, '.local', 'errors', 'lesson.json');
+  const taskPath = join(rootDir, '.local', 'tasks', 'lesson.json');
+  await writeTask(rootDir, 'lesson', legacyTask('lesson'));
+  await writeFile(flatPath, '{"legacy":true}\n');
+
+  assert.deepEqual(
+    await migrateLegacyTask('lesson', rootDir, {
+      beforeDiagnosticStaging: () => {
+        throw new Error('simulated staging-boundary failure');
+      },
+    }),
+    {
+      migrated: 0,
+      conflicts: [{ id: 'lesson', reason: 'error-diagnostic-conflict' }],
+    },
+  );
+  assert.equal(await readFile(flatPath, 'utf8'), '{"legacy":true}\n');
+  assert.equal(JSON.parse(await readFile(taskPath, 'utf8')).schemaVersion, 3);
+
+  assert.deepEqual(await migrateLegacyTask('lesson', rootDir), { migrated: 1, conflicts: [] });
+  assert.equal(
+    await readFile(join(rootDir, '.local', 'errors', 'lesson', 'legacy', 'error.json'), 'utf8'),
+    '{"legacy":true}\n',
+  );
+  assert.equal(JSON.parse(await readFile(taskPath, 'utf8')).schemaVersion, 4);
+});
+
 test('serializes concurrent migration of the same flat diagnostic', async () => {
   const { migrateLegacyTask } = await import('@/lib/server/task-migration.ts');
   const rootDir = await localRoot('task-migration-error-concurrent-');

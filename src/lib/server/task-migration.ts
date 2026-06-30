@@ -42,6 +42,10 @@ export type TaskMigrationResult = {
   conflicts: TaskMigrationConflict[];
 };
 
+export type TaskMigrationDependencies = {
+  beforeDiagnosticStaging?: () => void | Promise<void>;
+};
+
 export class TaskMigrationError extends Error {
   constructor(readonly reason: TaskMigrationConflictReason) {
     super(`Legacy task migration failed: ${reason}.`);
@@ -82,7 +86,11 @@ async function ensureRealDirectory(path: string) {
   }
 }
 
-async function normalizeLegacyError(slug: string, errorsDir: string) {
+async function normalizeLegacyError(
+  slug: string,
+  errorsDir: string,
+  dependencies: TaskMigrationDependencies,
+) {
   const flatPath = join(errorsDir, `${slug}.json`);
   let source: string;
   try {
@@ -92,6 +100,18 @@ async function normalizeLegacyError(slug: string, errorsDir: string) {
     return false;
   }
 
+  try {
+    const taskErrorDir = join(errorsDir, slug);
+    const legacyDir = join(taskErrorDir, 'legacy');
+    await ensureRealDirectory(taskErrorDir);
+    await ensureRealDirectory(legacyDir);
+    await dependencies.beforeDiagnosticStaging?.();
+  } catch {
+    return false;
+  }
+
+  const legacyDir = join(errorsDir, slug, 'legacy');
+  const targetPath = join(legacyDir, 'error.json');
   const stagingPath = join(errorsDir, `.${slug}.${randomUUID()}.legacy-error.tmp`);
   try {
     await rename(flatPath, stagingPath);
@@ -100,12 +120,6 @@ async function normalizeLegacyError(slug: string, errorsDir: string) {
   }
 
   try {
-    const taskErrorDir = join(errorsDir, slug);
-    const legacyDir = join(taskErrorDir, 'legacy');
-    await ensureRealDirectory(taskErrorDir);
-    await ensureRealDirectory(legacyDir);
-    const targetPath = join(legacyDir, 'error.json');
-
     try {
       await link(stagingPath, targetPath);
     } catch (error) {
@@ -175,6 +189,7 @@ async function migrateCandidate(
   candidate: LegacyCandidate,
   canonical: LegacyCandidate,
   rootDir?: string,
+  dependencies: TaskMigrationDependencies = {},
 ) {
   const paths = await ensureLocalDirs(rootDir);
   if (candidate.task.output.path !== `.local/lessons/${candidate.slug}.json`) {
@@ -190,7 +205,7 @@ async function migrateCandidate(
     return { id: candidate.slug, reason: 'story-source-conflict' } satisfies TaskMigrationConflict;
   }
 
-  if (!(await normalizeLegacyError(candidate.slug, paths.errorsDir))) {
+  if (!(await normalizeLegacyError(candidate.slug, paths.errorsDir, dependencies))) {
     return { id: candidate.slug, reason: 'error-diagnostic-conflict' } satisfies TaskMigrationConflict;
   }
 
@@ -237,7 +252,11 @@ async function findCanonicalCandidate(videoId: string, tasksDir: string) {
   return candidates[0];
 }
 
-export async function migrateLegacyTask(slug: string, rootDir?: string): Promise<TaskMigrationResult> {
+export async function migrateLegacyTask(
+  slug: string,
+  rootDir?: string,
+  dependencies: TaskMigrationDependencies = {},
+): Promise<TaskMigrationResult> {
   localSlugSchema.parse(slug);
   const { tasksDir, rootDir: canonicalRoot } = await ensureLocalDirs(rootDir);
   return withTaskFileLock(canonicalRoot, slug, async () => {
@@ -254,7 +273,12 @@ export async function migrateLegacyTask(slug: string, rootDir?: string): Promise
     }
     const canonical =
       (await findCanonicalCandidate(parsed.candidate.task.video.id, tasksDir)) ?? parsed.candidate;
-    const conflict = await migrateCandidate(parsed.candidate, canonical, canonicalRoot);
+    const conflict = await migrateCandidate(
+      parsed.candidate,
+      canonical,
+      canonicalRoot,
+      dependencies,
+    );
     return conflict ? { migrated: 0, conflicts: [conflict] } : { migrated: 1, conflicts: [] };
   });
 }
