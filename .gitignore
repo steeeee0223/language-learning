@@ -28,5 +28,5 @@ yarn-error.log*
 next-env.d.ts
 
 # ai
-docs/superpowers/
+docs/superpowers/plans/
 .worktrees/
