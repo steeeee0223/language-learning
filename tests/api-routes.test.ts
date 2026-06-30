@@ -6,6 +6,7 @@ import test, { describe, it } from 'node:test';
 
 import { GET as getLessons } from '@/app/api/lessons/route.ts';
 import { GET as getLesson } from '@/app/api/lessons/[slug]/route.ts';
+import { createStoriesPostHandler } from '@/app/api/stories/route.ts';
 import { POST as postTask } from '@/app/api/tasks/route.ts';
 import { lessonSchema } from '@/lib/lesson-content.ts';
 
@@ -47,6 +48,61 @@ test('POST /api/tasks writes a task file and returns local paths', async () => {
   assert.match(payload.taskPath, /^\.local\/tasks\/\d{4}-\d{2}-\d{2}-me-at-the-zoo\.json$/);
   assert.match(payload.outputPath, /^\.local\/lessons\/\d{4}-\d{2}-\d{2}-me-at-the-zoo\.json$/);
   assert.equal('suggestedCommand' in payload, false);
+});
+
+test('POST /api/stories creates then reuses a transcript-free story response', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-story-'));
+  let fetchCount = 0;
+  const postStory = createStoriesPostHandler({
+    rootDir,
+    fetchBundle: async (url) => {
+      fetchCount += 1;
+      return {
+        video: { url, id: 'jNQXAC9IVRw', title: 'Me at the zoo' },
+        transcript: {
+          source: 'youtube-transcript.io',
+          segments: [{ text: 'Hello.', start: 0, duration: 1 }],
+        },
+      };
+    },
+  });
+
+  const firstResponse = await postStory(
+    new Request('http://localhost/api/stories', {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://youtu.be/jNQXAC9IVRw' }),
+    }),
+  );
+  const firstPayload = await firstResponse.json();
+
+  assert.equal(firstResponse.status, 200);
+  assert.deepEqual(firstPayload, {
+    story: {
+      id: 'jNQXAC9IVRw',
+      title: 'Me at the zoo',
+      url: 'https://youtu.be/jNQXAC9IVRw',
+      createdAt: firstPayload.story.createdAt,
+    },
+    reused: false,
+  });
+  assert.match(firstPayload.story.createdAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal('transcript' in firstPayload.story, false);
+
+  const originalApiKey = process.env.YOUTUBE_TRANSCRIPT_API_KEY;
+  delete process.env.YOUTUBE_TRANSCRIPT_API_KEY;
+  const secondResponse = await createStoriesPostHandler({ rootDir })(
+    new Request('http://localhost/api/stories', {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }),
+    }),
+  );
+  if (originalApiKey !== undefined) process.env.YOUTUBE_TRANSCRIPT_API_KEY = originalApiKey;
+  const secondPayload = await secondResponse.json();
+
+  assert.equal(secondResponse.status, 200);
+  assert.equal(secondPayload.reused, true);
+  assert.deepEqual(secondPayload.story, firstPayload.story);
+  assert.equal(fetchCount, 1);
 });
 
 test('GET /api/lessons lists JSON lessons and detail returns structured content', async () => {

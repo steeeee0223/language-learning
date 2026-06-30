@@ -3,6 +3,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 
 function getLocalPaths(baseDir: string) {
   const localDir = join(baseDir, '.local');
+  const storiesDir = join(localDir, 'stories');
   const tasksDir = join(localDir, 'tasks');
   const lessonsDir = join(localDir, 'lessons');
   const errorsDir = join(localDir, 'errors');
@@ -10,6 +11,7 @@ function getLocalPaths(baseDir: string) {
   return {
     rootDir: baseDir,
     localDir,
+    storiesDir,
     tasksDir,
     lessonsDir,
     errorsDir,
@@ -61,6 +63,7 @@ export async function ensureLocalDirs(rootDir?: string) {
   const canonicalRoot = await canonicalizeLocalRoot(rootDir);
   const paths = getLocalPaths(canonicalRoot);
   await ensureRealDirectory(paths.localDir, canonicalRoot);
+  await ensureRealDirectory(paths.storiesDir, canonicalRoot);
   await ensureRealDirectory(paths.tasksDir, canonicalRoot);
   await ensureRealDirectory(paths.lessonsDir, canonicalRoot);
   await ensureRealDirectory(paths.errorsDir, canonicalRoot);
