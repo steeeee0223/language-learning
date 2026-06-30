@@ -150,6 +150,63 @@ test('normalizes a flat legacy error while preserving existing nested diagnostic
   await assert.rejects(() => readFile(join(rootDir, '.local', 'errors', 'lesson.json'), 'utf8'), /ENOENT/);
 });
 
+test('serializes concurrent migration of the same flat diagnostic', async () => {
+  const { migrateLegacyTask } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-error-concurrent-');
+  await writeTask(rootDir, 'lesson', legacyTask('lesson'));
+  await writeFile(join(rootDir, '.local', 'errors', 'lesson.json'), '{"legacy":true}\n');
+
+  const results = await Promise.all([
+    migrateLegacyTask('lesson', rootDir),
+    migrateLegacyTask('lesson', rootDir),
+  ]);
+
+  assert.equal(results.reduce((sum, result) => sum + result.migrated, 0), 1);
+  assert.equal(
+    await readFile(join(rootDir, '.local', 'errors', 'lesson', 'legacy', 'error.json'), 'utf8'),
+    '{"legacy":true}\n',
+  );
+});
+
+test('keeps a differing flat diagnostic when the nested legacy target already exists', async () => {
+  const { migrateLegacyTasks } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-error-target-conflict-');
+  await writeTask(rootDir, 'lesson', legacyTask('lesson'));
+  await writeFile(join(rootDir, '.local', 'errors', 'lesson.json'), '{"flat":true}\n');
+  await mkdir(join(rootDir, '.local', 'errors', 'lesson', 'legacy'), { recursive: true });
+  await writeFile(
+    join(rootDir, '.local', 'errors', 'lesson', 'legacy', 'error.json'),
+    '{"nested":true}\n',
+  );
+
+  assert.deepEqual(await migrateLegacyTasks(rootDir), {
+    migrated: 0,
+    conflicts: [{ id: 'lesson', reason: 'error-diagnostic-conflict' }],
+  });
+  assert.equal(await readFile(join(rootDir, '.local', 'errors', 'lesson.json'), 'utf8'), '{"flat":true}\n');
+  assert.equal(
+    await readFile(join(rootDir, '.local', 'errors', 'lesson', 'legacy', 'error.json'), 'utf8'),
+    '{"nested":true}\n',
+  );
+});
+
+test('reports a symlinked diagnostic directory as a recoverable conflict', async () => {
+  const { migrateLegacyTasks } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-error-symlink-');
+  await writeTask(rootDir, 'lesson', legacyTask('lesson'));
+  await writeFile(join(rootDir, '.local', 'errors', 'lesson.json'), '{"flat":true}\n');
+  const outside = join(rootDir, 'outside-errors');
+  await mkdir(outside);
+  await symlink(outside, join(rootDir, '.local', 'errors', 'lesson'));
+
+  assert.deepEqual(await migrateLegacyTasks(rootDir), {
+    migrated: 0,
+    conflicts: [{ id: 'lesson', reason: 'error-diagnostic-conflict' }],
+  });
+  assert.equal(await readFile(join(rootDir, '.local', 'errors', 'lesson.json'), 'utf8'), '{"flat":true}\n');
+  assert.deepEqual(await readdir(outside), []);
+});
+
 test('skips v4 and non-regular entries and reports malformed JSON without deleting it', async () => {
   const { migrateLegacyTasks } = await import('@/lib/server/task-migration.ts');
   const rootDir = await localRoot('task-migration-filter-');
@@ -167,13 +224,16 @@ test('skips v4 and non-regular entries and reports malformed JSON without deleti
   assert.equal(JSON.parse(await readFile(join(rootDir, '.local', 'tasks', 'current.json'), 'utf8')).schemaVersion, 4);
 });
 
-test('skips a schema-valid v4 task whose ID differs from its filename', async () => {
+test('reports a schema-valid v4 task whose ID differs from its filename without rewriting it', async () => {
   const { migrateLegacyTasks } = await import('@/lib/server/task-migration.ts');
   const rootDir = await localRoot('task-migration-v4-id-mismatch-');
   const original = `${JSON.stringify(v4Task('embedded-id'), null, 2)}\n`;
   await writeFile(join(rootDir, '.local', 'tasks', 'filename-id.json'), original);
 
-  assert.deepEqual(await migrateLegacyTasks(rootDir), { migrated: 0, conflicts: [] });
+  assert.deepEqual(await migrateLegacyTasks(rootDir), {
+    migrated: 0,
+    conflicts: [{ id: 'filename-id', reason: 'malformed-task' }],
+  });
   assert.equal(
     await readFile(join(rootDir, '.local', 'tasks', 'filename-id.json'), 'utf8'),
     original,
@@ -206,4 +266,82 @@ test('readTask migrates one legacy task on demand without touching its peers', a
   assert.equal(task.schemaVersion, 4);
   assert.equal(task.id, 'requested');
   assert.equal(JSON.parse(await readFile(join(rootDir, '.local', 'tasks', 'peer.json'), 'utf8')).schemaVersion, 3);
+});
+
+test('on-demand migration makes the oldest same-video source canonical', async () => {
+  const { TaskMigrationError } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-read-newer-first-');
+  await writeTask(rootDir, 'newer', legacyTask('newer', {
+    createdAt: '2026-06-21T08:00:00.000Z',
+    transcript: {
+      source: 'youtube-transcript.io',
+      segments: [{ text: 'Newer source.', start: 0, duration: 1 }],
+    },
+  }));
+  await writeTask(rootDir, 'older', legacyTask('older', {
+    createdAt: '2026-06-19T08:00:00.000Z',
+    transcript: {
+      source: 'youtube-transcript.io',
+      segments: [{ text: 'Oldest source.', start: 0, duration: 1 }],
+    },
+  }));
+
+  await assert.rejects(
+    () => readTask('newer', rootDir),
+    (error: unknown) =>
+      error instanceof TaskMigrationError && error.reason === 'story-source-conflict',
+  );
+  const story = JSON.parse(
+    await readFile(join(rootDir, '.local', 'stories', `${videoId}.json`), 'utf8'),
+  );
+  assert.equal(story.transcript.segments[0].text, 'Oldest source.');
+  assert.equal(
+    JSON.parse(await readFile(join(rootDir, '.local', 'tasks', 'newer.json'), 'utf8')).schemaVersion,
+    3,
+  );
+});
+
+test('single-task migration reports malformed JSON through the typed conflict path', async () => {
+  const { migrateLegacyTask, TaskMigrationError } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-single-malformed-');
+  await writeFile(join(rootDir, '.local', 'tasks', 'broken.json'), '{not json');
+
+  assert.deepEqual(await migrateLegacyTask('broken', rootDir), {
+    migrated: 0,
+    conflicts: [{ id: 'broken', reason: 'malformed-task' }],
+  });
+  await assert.rejects(
+    () => readTask('broken', rootDir),
+    (error: unknown) => error instanceof TaskMigrationError && error.reason === 'malformed-task',
+  );
+  assert.equal(await readFile(join(rootDir, '.local', 'tasks', 'broken.json'), 'utf8'), '{not json');
+});
+
+test('migration and generation update wait on the same filesystem task lock', async () => {
+  const { withTaskFileLock } = await import('@/lib/server/task-file-lock.ts');
+  const { migrateLegacyTask } = await import('@/lib/server/task-migration.ts');
+  const { updateTaskGeneration } = await import('@/lib/server/task-store.ts');
+  const rootDir = await localRoot('task-migration-update-lock-');
+  await writeTask(rootDir, 'lesson', legacyTask('lesson'));
+  let migration!: ReturnType<typeof migrateLegacyTask>;
+  let update!: ReturnType<typeof updateTaskGeneration>;
+
+  await withTaskFileLock(rootDir, 'lesson', async () => {
+    migration = migrateLegacyTask('lesson', rootDir);
+    update = updateTaskGeneration(
+      'lesson',
+      { status: 'succeeded', skillVersion: '4', completedAt: '2026-06-22T08:00:00.000Z' },
+      rootDir,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(
+      JSON.parse(await readFile(join(rootDir, '.local', 'tasks', 'lesson.json'), 'utf8')).schemaVersion,
+      3,
+    );
+  });
+
+  await Promise.all([migration, update]);
+  const finalTask = await readTask('lesson', rootDir);
+  assert.equal(finalTask.generation.status, 'succeeded');
+  assert.equal(finalTask.generation.completedAt, '2026-06-22T08:00:00.000Z');
 });

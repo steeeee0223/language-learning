@@ -18,6 +18,7 @@ import { localSlugSchema } from '@/lib/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
 import { storySchema } from './story-schema';
 import { persistStoryIfAbsent } from './story-store';
+import { withTaskFileLock } from './task-file-lock';
 import {
   legacyStoredTaskSchema,
   storedTaskSchema,
@@ -40,6 +41,13 @@ export type TaskMigrationResult = {
   migrated: number;
   conflicts: TaskMigrationConflict[];
 };
+
+export class TaskMigrationError extends Error {
+  constructor(readonly reason: TaskMigrationConflictReason) {
+    super(`Legacy task migration failed: ${reason}.`);
+    this.name = 'TaskMigrationError';
+  }
+}
 
 type LegacyCandidate = {
   slug: string;
@@ -84,22 +92,38 @@ async function normalizeLegacyError(slug: string, errorsDir: string) {
     return false;
   }
 
-  const taskErrorDir = join(errorsDir, slug);
-  const legacyDir = join(taskErrorDir, 'legacy');
-  await ensureRealDirectory(taskErrorDir);
-  await ensureRealDirectory(legacyDir);
-  const targetPath = join(legacyDir, 'error.json');
-
+  const stagingPath = join(errorsDir, `.${slug}.${randomUUID()}.legacy-error.tmp`);
   try {
-    await link(flatPath, targetPath);
-  } catch (error) {
-    if (!hasErrorCode(error, 'EEXIST')) throw error;
-    if ((await readRegularFile(targetPath)) !== source) return false;
+    await rename(flatPath, stagingPath);
+  } catch {
+    return false;
   }
 
-  if ((await readRegularFile(targetPath)) !== source) return false;
-  await unlink(flatPath);
-  return true;
+  try {
+    const taskErrorDir = join(errorsDir, slug);
+    const legacyDir = join(taskErrorDir, 'legacy');
+    await ensureRealDirectory(taskErrorDir);
+    await ensureRealDirectory(legacyDir);
+    const targetPath = join(legacyDir, 'error.json');
+
+    try {
+      await link(stagingPath, targetPath);
+    } catch (error) {
+      if (!hasErrorCode(error, 'EEXIST')) throw error;
+      if ((await readRegularFile(targetPath)) !== source) throw new Error('Diagnostic target conflict.');
+    }
+
+    await unlink(stagingPath);
+    return true;
+  } catch {
+    try {
+      await link(stagingPath, flatPath);
+      await unlink(stagingPath);
+    } catch {
+      // Keep the uniquely named staging file when the original pathname is no longer available.
+    }
+    return false;
+  }
 }
 
 function toStory(task: LegacyStoredTask) {
@@ -147,15 +171,22 @@ async function replaceLegacyTask(candidate: LegacyCandidate, tasksDir: string) {
   }
 }
 
-async function migrateCandidate(candidate: LegacyCandidate, rootDir?: string) {
+async function migrateCandidate(
+  candidate: LegacyCandidate,
+  canonical: LegacyCandidate,
+  rootDir?: string,
+) {
   const paths = await ensureLocalDirs(rootDir);
   if (candidate.task.output.path !== `.local/lessons/${candidate.slug}.json`) {
     return { id: candidate.slug, reason: 'unsafe-output-path' } satisfies TaskMigrationConflict;
   }
 
-  const story = toStory(candidate.task);
+  const story = toStory(canonical.task);
   const persisted = await persistStoryIfAbsent({ story, rootDir: paths.rootDir });
-  if (!hasSameSource(persisted.story, candidate.task)) {
+  if (
+    !hasSameSource(persisted.story, canonical.task) ||
+    !hasSameSource(persisted.story, candidate.task)
+  ) {
     return { id: candidate.slug, reason: 'story-source-conflict' } satisfies TaskMigrationConflict;
   }
 
@@ -169,24 +200,63 @@ async function migrateCandidate(candidate: LegacyCandidate, rootDir?: string) {
 
 async function readCandidate(slug: string, tasksDir: string) {
   const source = await readRegularFile(join(tasksDir, `${slug}.json`));
-  const value: unknown = JSON.parse(source);
+  let value: unknown;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    return { malformed: true as const };
+  }
   const current = storedTaskSchema.safeParse(value);
-  if (current.success) return { current: true as const };
+  if (current.success) {
+    return current.data.id === slug ? { current: true as const } : { malformed: true as const };
+  }
   const legacy = legacyStoredTaskSchema.safeParse(value);
   if (!legacy.success) return { malformed: true as const };
   return { candidate: { slug, task: legacy.data, source } satisfies LegacyCandidate };
 }
 
+async function findCanonicalCandidate(videoId: string, tasksDir: string) {
+  const candidates: LegacyCandidate[] = [];
+  const entries = await readdir(tasksDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const slug = entry.name.slice(0, -'.json'.length);
+    if (!localSlugSchema.safeParse(slug).success) continue;
+    try {
+      const parsed = await readCandidate(slug, tasksDir);
+      if ('candidate' in parsed && parsed.candidate.task.video.id === videoId) {
+        candidates.push(parsed.candidate);
+      }
+    } catch {
+      // Invalid peer tasks cannot own a canonical source.
+    }
+  }
+  candidates.sort((left, right) =>
+    left.task.createdAt.localeCompare(right.task.createdAt) || left.slug.localeCompare(right.slug),
+  );
+  return candidates[0];
+}
+
 export async function migrateLegacyTask(slug: string, rootDir?: string): Promise<TaskMigrationResult> {
   localSlugSchema.parse(slug);
   const { tasksDir, rootDir: canonicalRoot } = await ensureLocalDirs(rootDir);
-  const parsed = await readCandidate(slug, tasksDir);
-  if ('current' in parsed) return { migrated: 0, conflicts: [] };
-  if ('malformed' in parsed) {
-    return { migrated: 0, conflicts: [{ id: slug, reason: 'malformed-task' }] };
-  }
-  const conflict = await migrateCandidate(parsed.candidate, canonicalRoot);
-  return conflict ? { migrated: 0, conflicts: [conflict] } : { migrated: 1, conflicts: [] };
+  return withTaskFileLock(canonicalRoot, slug, async () => {
+    let parsed;
+    try {
+      parsed = await readCandidate(slug, tasksDir);
+    } catch (error) {
+      if (hasErrorCode(error, 'ENOENT')) throw error;
+      return { migrated: 0, conflicts: [{ id: slug, reason: 'malformed-task' }] };
+    }
+    if ('current' in parsed) return { migrated: 0, conflicts: [] };
+    if ('malformed' in parsed) {
+      return { migrated: 0, conflicts: [{ id: slug, reason: 'malformed-task' }] };
+    }
+    const canonical =
+      (await findCanonicalCandidate(parsed.candidate.task.video.id, tasksDir)) ?? parsed.candidate;
+    const conflict = await migrateCandidate(parsed.candidate, canonical, canonicalRoot);
+    return conflict ? { migrated: 0, conflicts: [conflict] } : { migrated: 1, conflicts: [] };
+  });
 }
 
 export async function migrateLegacyTasks(rootDir?: string): Promise<TaskMigrationResult> {
@@ -217,9 +287,9 @@ export async function migrateLegacyTasks(rootDir?: string): Promise<TaskMigratio
   );
   let migrated = 0;
   for (const candidate of candidates) {
-    const conflict = await migrateCandidate(candidate, paths.rootDir);
-    if (conflict) conflicts.push(conflict);
-    else migrated += 1;
+    const result = await migrateLegacyTask(candidate.slug, paths.rootDir);
+    migrated += result.migrated;
+    conflicts.push(...result.conflicts);
   }
   return { migrated, conflicts };
 }
