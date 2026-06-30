@@ -37,7 +37,7 @@ Local-first Next.js + Fumadocs app for turning short YouTube videos into structu
 
 With the recommended ChatGPT sign-in, each OS user uses their own Codex account and usage allowance, with no API key required. The project does not ship or configure a shared `OPENAI_API_KEY`, Vercel AI Gateway key, or other shared AI key. Generation uses whatever local Codex authentication belongs to the OS account running the app.
 
-For generation, the app explicitly invokes the repository's `.agents/skills/generating-lesson` skill so the output contract stays consistent. The Codex agent runs in a read-only sandbox; sandboxed network access and web search are disabled, though it may use read-only tools to inspect the repository and skill files. Codex still sends the prompt and transcript to OpenAI's Codex service under the local account. The app then validates the returned MDX and writes the lesson itself.
+For generation, the app explicitly invokes the repository's `.agents/skills/generating-lesson` skill so the JSON output contract stays consistent. The Codex agent runs in a read-only sandbox; sandboxed network access and web search are disabled, though it may use read-only tools to inspect the repository and skill files. Codex still sends the prompt and transcript to OpenAI's Codex service under the local account. The app then validates the returned JSON and writes the lesson itself.
 
 ## Environment
 
@@ -69,7 +69,7 @@ Generated local artifacts are intentionally gitignored:
   errors/
 ```
 
-`.local/tasks` contains local task JSON, and `.local/lessons` contains generated lesson MDX. A failed generation with no returned content is written to `.local/errors/<task-id>.json`. When Codex returns rejected content, the attempt is written to `.local/errors/<task-id>/<attempt>/` with `error.json` and `generated.mdx`. Codex credentials are not stored under `.local`.
+`.local/tasks` contains local task JSON, and `.local/lessons` contains generated lesson JSON. A failed generation with no returned content is written to `.local/errors/<task-id>.json`. When Codex returns rejected content, the attempt is written to `.local/errors/<task-id>/<attempt>/` with `error.json` and `generated.json`. Codex credentials are not stored under `.local`.
 
 For tests or isolated local runs, set `LOCAL_DATA_ROOT` to another directory.
 

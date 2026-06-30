@@ -13,8 +13,8 @@ Return exactly one JSON object with the following shape and semantics. Include e
     "translatedTitle": "string"
   },
   "lesson": {
-    "targetLanguage": "en | zh",
-    "cefrLevels": ["A1 | A2 | B1 | B2 | C1 | C2"],
+    "targetLanguage": "zh",
+    "cefrLevels": ["A2", "B1"],
     "transcriptSource": "string",
     "focus": "string"
   },
