@@ -17,37 +17,96 @@ async function validLessonJson() {
   return JSON.stringify(lessonSchema.parse(fixture));
 }
 
-test('POST /api/tasks writes a task file and returns local paths', async () => {
+async function writeApiStory(rootDir: string) {
+  const storiesDir = join(rootDir, '.local', 'stories');
+  await mkdir(storiesDir, { recursive: true });
+  await writeFile(
+    join(storiesDir, 'jNQXAC9IVRw.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      id: 'jNQXAC9IVRw',
+      createdAt: '2026-06-27T08:00:00.000Z',
+      video: {
+        url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+        id: 'jNQXAC9IVRw',
+        title: 'Me at the zoo',
+      },
+      transcript: {
+        source: 'youtube-transcript.io',
+        segments: [{ text: 'Hello.', start: 0, duration: 1 }],
+      },
+    }),
+  );
+}
+
+test('POST /api/tasks writes a normalized task and returns only its ID', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-task-'));
+  await writeApiStory(rootDir);
   process.env.LOCAL_DATA_ROOT = rootDir;
 
   const response = await postTask(
     new Request('http://localhost/api/tasks', {
       method: 'POST',
       body: JSON.stringify({
-        video: {
-          url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
-          id: 'jNQXAC9IVRw',
-          title: 'Me at the zoo',
-        },
-        transcript: {
-          source: 'youtube-transcript.io',
-          segments: [{ text: 'Hello.', start: 0, duration: 1 }],
-        },
+        storyId: 'jNQXAC9IVRw',
         learningSettings: {
           targetLanguage: 'en',
           cefrLevels: ['A1', 'A2'],
         },
+        modelPreset: 'best',
       }),
     }),
   );
   const payload = await response.json();
 
   assert.equal(response.status, 200);
-  assert.match(payload.taskSlug, /^\d{4}-\d{2}-\d{2}-me-at-the-zoo$/);
-  assert.match(payload.taskPath, /^\.local\/tasks\/\d{4}-\d{2}-\d{2}-me-at-the-zoo\.json$/);
-  assert.match(payload.outputPath, /^\.local\/lessons\/\d{4}-\d{2}-\d{2}-me-at-the-zoo\.json$/);
-  assert.equal('suggestedCommand' in payload, false);
+  assert.deepEqual(Object.keys(payload), ['taskId']);
+  assert.match(payload.taskId, /^[A-Za-z0-9][A-Za-z0-9_-]*$/);
+  const stored = JSON.parse(
+    await readFile(join(rootDir, '.local', 'tasks', `${payload.taskId}.json`), 'utf8'),
+  );
+  assert.equal(stored.id, payload.taskId);
+  assert.equal(stored.output.path, `.local/lessons/${payload.taskId}.json`);
+});
+
+test('POST /api/tasks strictly rejects embedded source material', async () => {
+  const response = await postTask(
+    new Request('http://localhost/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        storyId: 'jNQXAC9IVRw',
+        learningSettings: { targetLanguage: 'en', cefrLevels: ['A1'] },
+        modelPreset: 'fast',
+        transcript: {
+          source: 'youtube-transcript.io',
+          segments: [{ text: 'secret', start: 0, duration: 1 }],
+        },
+      }),
+    }),
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'Invalid task payload.' });
+});
+
+test('POST /api/tasks maps a missing story to a safe client error', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-missing-task-story-'));
+  process.env.LOCAL_DATA_ROOT = rootDir;
+  const response = await postTask(
+    new Request('http://localhost/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        storyId: 'jNQXAC9IVRw',
+        learningSettings: { targetLanguage: 'en', cefrLevels: ['A1'] },
+        modelPreset: 'auto',
+      }),
+    }),
+  );
+
+  const payload = await response.json();
+  assert.equal(response.status, 404);
+  assert.deepEqual(payload, { error: 'Story not found.' });
+  assert.equal(JSON.stringify(payload).includes(rootDir), false);
 });
 
 test('POST /api/stories creates then reuses a transcript-free story response', async () => {

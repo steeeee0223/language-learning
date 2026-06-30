@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
- const modelPresets = ['auto', 'fast', 'best'] as const;
+const modelPresets = ['auto', 'fast', 'best'] as const;
 export const modelPresetSchema = z.enum(modelPresets);
 export const localSlugSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/);
 
@@ -15,9 +15,7 @@ export const generateLessonRequestSchema = z.strictObject({
 });
 
 export const taskCreationResponseSchema = z.strictObject({
-  taskSlug: localSlugSchema,
-  taskPath: z.string().startsWith('.local/tasks/'),
-  outputPath: z.string().startsWith('.local/lessons/'),
+  taskId: localSlugSchema,
 });
 
 export const generateLessonResponseSchema = z.strictObject({

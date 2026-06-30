@@ -1,20 +1,24 @@
 import { z } from 'zod';
 
+import { modelPresetSchema } from './generation-contracts';
+
 export const cefrLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
- const targetLanguages = ['zh', 'en'] as const;
+const targetLanguages = ['zh', 'en'] as const;
 
 export const cefrLevelSchema = z.enum(cefrLevels);
 export const targetLanguageSchema = z.enum(targetLanguages);
 
- const transcriptSegmentSchema = z.strictObject({
+const transcriptSegmentSchema = z.strictObject({
   text: z.string().nonempty(),
   start: z.number().finite().nonnegative(),
   duration: z.number().finite().nonnegative(),
 });
 
+export const youtubeVideoIdSchema = z.string().regex(/^[A-Za-z0-9_-]{11}$/);
+
 export const videoMetadataSchema = z.strictObject({
   url: z.url(),
-  id: z.string().regex(/^[A-Za-z0-9_-]{11}$/),
+  id: youtubeVideoIdSchema,
   title: z.string().nonempty(),
 });
 
@@ -33,10 +37,10 @@ export const transcriptBundleSchema = z.strictObject({
   transcript: normalizedTranscriptSchema,
 });
 
-export const taskFileInputSchema = z.strictObject({
-  video: videoMetadataSchema,
-  transcript: normalizedTranscriptSchema,
+export const taskCreationRequestSchema = z.strictObject({
+  storyId: youtubeVideoIdSchema,
   learningSettings: learningSettingsSchema,
+  modelPreset: modelPresetSchema,
 });
 
 export type CefrLevel = z.infer<typeof cefrLevelSchema>;
@@ -44,4 +48,4 @@ export type TargetLanguage = z.infer<typeof targetLanguageSchema>;
 export type TranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
 export type LearningSettings = z.infer<typeof learningSettingsSchema>;
 export type TranscriptBundle = z.infer<typeof transcriptBundleSchema>;
-export type TaskFileInput = z.infer<typeof taskFileInputSchema>;
+export type TaskCreationRequest = z.infer<typeof taskCreationRequestSchema>;

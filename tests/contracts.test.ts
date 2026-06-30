@@ -1,73 +1,120 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { taskFileInputSchema } from '@/lib/contracts.ts';
-import { generationErrorResponseSchema } from '@/lib/generation-contracts.ts';
+import { taskCreationRequestSchema } from '@/lib/contracts.ts';
+import {
+  generationErrorResponseSchema,
+  taskCreationResponseSchema,
+} from '@/lib/generation-contracts.ts';
 import { storedTaskSchema } from '@/lib/server/task-schema.ts';
 
 const canonicalTask = {
-  video: {
-    url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
-    id: 'jNQXAC9IVRw',
-    title: 'Me at the zoo',
-  },
-  transcript: {
-    source: 'youtube-transcript.io',
-    segments: [{ text: 'Hello.', start: 0, duration: 1 }],
-  },
+  storyId: 'jNQXAC9IVRw',
   learningSettings: {
     targetLanguage: 'zh',
     cefrLevels: ['A2', 'B1'],
   },
+  modelPreset: 'best',
 };
 
 test('canonical task creation parses unchanged', () => {
-  assert.deepEqual(taskFileInputSchema.parse(canonicalTask), canonicalTask);
+  assert.deepEqual(taskCreationRequestSchema.parse(canonicalTask), canonicalTask);
 });
 
-test('empty CEFR levels and malformed transcript segments fail', () => {
+test('task creation requires at least one CEFR level', () => {
   assert.equal(
-    taskFileInputSchema.safeParse({
+    taskCreationRequestSchema.safeParse({
       ...canonicalTask,
       learningSettings: { ...canonicalTask.learningSettings, cefrLevels: [] },
     }).success,
     false,
   );
+});
+
+test('task creation rejects embedded source material and unknown keys', () => {
   assert.equal(
-    taskFileInputSchema.safeParse({
+    taskCreationRequestSchema.safeParse({
       ...canonicalTask,
+      video: { id: 'jNQXAC9IVRw' },
       transcript: {
-        ...canonicalTask.transcript,
-        segments: [{ text: '', start: -1, duration: Number.POSITIVE_INFINITY }],
+        source: 'youtube-transcript.io',
+        segments: [{ text: 'Hello.', start: 0, duration: 1 }],
       },
     }).success,
     false,
   );
+  assert.equal(
+    taskCreationRequestSchema.safeParse({ ...canonicalTask, unexpected: true }).success,
+    false,
+  );
 });
 
-test('unknown object keys fail', () => {
-  assert.equal(taskFileInputSchema.safeParse({ ...canonicalTask, unexpected: true }).success, false);
-});
-
-test('stored task schema parses the exact version 3 contract', () => {
+test('stored task schema parses the exact version 4 contract', () => {
   const task = {
-    schemaVersion: 3,
+    schemaVersion: 4,
+    id: 'task-123',
+    storyId: canonicalTask.storyId,
     createdAt: '2026-06-27T08:00:00.000Z',
-    ...canonicalTask,
+    learningSettings: canonicalTask.learningSettings,
+    modelPreset: canonicalTask.modelPreset,
     output: {
       format: 'json',
-      path: '.local/lessons/lesson.json',
+      path: '.local/lessons/task-123.json',
     },
     instructions: {
       requiredSections: ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'],
     },
     generation: {
       status: 'pending',
-      skillVersion: '3',
+      skillVersion: '4',
     },
   };
 
   assert.deepEqual(storedTaskSchema.parse(task), task);
+});
+
+test('stored task schema requires aligned IDs and rejects embedded source and generation preset', () => {
+  const task = {
+    schemaVersion: 4,
+    id: 'task-123',
+    storyId: canonicalTask.storyId,
+    createdAt: '2026-06-27T08:00:00.000Z',
+    learningSettings: canonicalTask.learningSettings,
+    modelPreset: canonicalTask.modelPreset,
+    output: { format: 'json', path: '.local/lessons/different-task.json' },
+    instructions: {
+      requiredSections: ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'],
+    },
+    generation: { status: 'pending', skillVersion: '4' },
+  };
+
+  assert.equal(storedTaskSchema.safeParse(task).success, false);
+  assert.equal(
+    storedTaskSchema.safeParse({
+      ...task,
+      output: { format: 'json', path: '.local/lessons/task-123.json' },
+      video: {},
+    }).success,
+    false,
+  );
+  assert.equal(
+    storedTaskSchema.safeParse({
+      ...task,
+      output: { format: 'json', path: '.local/lessons/task-123.json' },
+      generation: { ...task.generation, modelPreset: 'best' },
+    }).success,
+    false,
+  );
+});
+
+test('task creation response exposes only the task ID', () => {
+  assert.deepEqual(taskCreationResponseSchema.parse({ taskId: 'task-123' }), {
+    taskId: 'task-123',
+  });
+  assert.equal(
+    taskCreationResponseSchema.safeParse({ taskId: 'task-123', taskPath: '.local/tasks/task-123.json' }).success,
+    false,
+  );
 });
 
 test('generation errors may identify their local diagnostic artifact', () => {

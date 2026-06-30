@@ -1,57 +1,71 @@
-import { writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { link, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { TaskFileInput } from '@/lib/contracts';
+import { taskCreationRequestSchema, type TaskCreationRequest } from '@/lib/contracts';
+import { localSlugSchema } from '@/lib/generation-contracts';
 import { ensureLocalDirs } from './local-paths.ts';
+import { readStory } from './story-store.ts';
 import { LESSON_SKILL_VERSION, requiredLessonSections, storedTaskSchema, TASK_SCHEMA_VERSION } from './task-schema.ts';
-import { tryAcquireTaskOperation } from './task-operation-lock.ts';
 
-type BuildTaskFileInput = TaskFileInput & {
+type BuildTaskFileDependencies = {
   rootDir?: string;
-  now?: Date;
+  now?: () => Date;
+  idGenerator?: () => string;
 };
 
 type BuildTaskFileResult = {
-  taskSlug: string;
-  taskPath: string;
-  outputPath: string;
+  taskId: string;
 };
 
-function slugifyTitle(title: string, fallback: string) {
-  const slug = title
-    .normalize('NFKD')
-    .toLowerCase()
-    .replace(/['"]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-
-  return slug || fallback;
+export class TaskCreationError extends Error {
+  constructor(
+    readonly code: 'STORY_NOT_FOUND',
+    options?: ErrorOptions,
+  ) {
+    super('Task creation failed.', options);
+    this.name = 'TaskCreationError';
+  }
 }
 
-export async function buildTaskFile(input: BuildTaskFileInput): Promise<BuildTaskFileResult> {
-  const rootDir = input.rootDir;
-  const now = input.now ?? new Date();
-  const paths = await ensureLocalDirs(rootDir);
-  const datePrefix = now.toISOString().slice(0, 10);
-  const basename = `${datePrefix}-${slugifyTitle(input.video.title, input.video.id)}`;
-  const taskPath = `.local/tasks/${basename}.json`;
-  const outputPath = `.local/lessons/${basename}.json`;
-  const releaseTaskOperation = tryAcquireTaskOperation(paths.rootDir, basename);
-  if (!releaseTaskOperation) {
-    throw new Error('This task is currently being generated.');
+function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error && error.code === code;
+}
+
+function isMissingStory(error: unknown, storyId: string) {
+  return error instanceof Error && error.message === `Story ${storyId} does not exist.`;
+}
+
+export async function buildTaskFile(
+  request: TaskCreationRequest,
+  dependencies: BuildTaskFileDependencies = {},
+): Promise<BuildTaskFileResult> {
+  const input = taskCreationRequestSchema.parse(request);
+  try {
+    await readStory(input.storyId, dependencies.rootDir);
+  } catch (error) {
+    if (isMissingStory(error, input.storyId)) {
+      throw new TaskCreationError('STORY_NOT_FOUND', { cause: error });
+    }
+    throw error;
   }
 
-  try {
+  const paths = await ensureLocalDirs(dependencies.rootDir);
+  const now = (dependencies.now ?? (() => new Date()))();
+  const idGenerator = dependencies.idGenerator ?? randomUUID;
+
+  while (true) {
+    const id = localSlugSchema.parse(idGenerator());
     const task = storedTaskSchema.parse({
       schemaVersion: TASK_SCHEMA_VERSION,
+      id,
+      storyId: input.storyId,
       createdAt: now.toISOString(),
-      video: input.video,
-      transcript: input.transcript,
       learningSettings: input.learningSettings,
+      modelPreset: input.modelPreset,
       output: {
         format: 'json',
-        path: outputPath,
+        path: `.local/lessons/${id}.json`,
       },
       instructions: {
         requiredSections: requiredLessonSections,
@@ -61,19 +75,21 @@ export async function buildTaskFile(input: BuildTaskFileInput): Promise<BuildTas
         skillVersion: LESSON_SKILL_VERSION,
       },
     });
+    const finalPath = join(paths.tasksDir, `${id}.json`);
+    const tempPath = join(paths.tasksDir, `.${id}.${process.pid}.${randomUUID()}.tmp`);
 
-    await writeFile(
-      join(paths.tasksDir, `${basename}.json`),
-      `${JSON.stringify(task, null, 2)}\n`,
-      'utf8',
-    );
-  } finally {
-    releaseTaskOperation();
+    try {
+      await writeFile(tempPath, `${JSON.stringify(task, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+      try {
+        await link(tempPath, finalPath);
+      } catch (error) {
+        if (hasErrorCode(error, 'EEXIST')) continue;
+        throw error;
+      }
+    } finally {
+      await unlink(tempPath).catch(() => undefined);
+    }
+
+    return { taskId: id };
   }
-
-  return {
-    taskSlug: basename,
-    taskPath,
-    outputPath,
-  };
 }

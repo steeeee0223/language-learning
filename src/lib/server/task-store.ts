@@ -1,4 +1,5 @@
-import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, rename, unlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { localSlugSchema } from '@/lib/generation-contracts';
@@ -12,7 +13,17 @@ function assertTaskSlug(slug: string) {
 export async function readTask(slug: string, rootDir?: string): Promise<StoredTask> {
   assertTaskSlug(slug);
   const { tasksDir } = await ensureLocalDirs(rootDir);
-  return storedTaskSchema.parse(JSON.parse(await readFile(join(tasksDir, `${slug}.json`), 'utf8')));
+  let file: FileHandle | undefined;
+  try {
+    file = await open(join(tasksDir, `${slug}.json`), constants.O_RDONLY | constants.O_NOFOLLOW);
+    const stats = await file.stat();
+    if (!stats.isFile()) throw new Error('Task path is not a regular file.');
+    const task = storedTaskSchema.parse(JSON.parse(await file.readFile('utf8')));
+    if (task.id !== slug) throw new Error('Stored task ID does not match its filename.');
+    return task;
+  } finally {
+    await file?.close();
+  }
 }
 
 export async function updateTaskGeneration(
