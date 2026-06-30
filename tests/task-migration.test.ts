@@ -150,18 +150,19 @@ test('normalizes a flat legacy error while preserving existing nested diagnostic
   await assert.rejects(() => readFile(join(rootDir, '.local', 'errors', 'lesson.json'), 'utf8'), /ENOENT/);
 });
 
-test('keeps the flat diagnostic recoverable when migration fails before staging', async () => {
+test('retries safely when migration fails after linking the nested diagnostic', async () => {
   const { migrateLegacyTask } = await import('@/lib/server/task-migration.ts');
-  const rootDir = await localRoot('task-migration-error-preparation-failure-');
+  const rootDir = await localRoot('task-migration-error-post-link-failure-');
   const flatPath = join(rootDir, '.local', 'errors', 'lesson.json');
+  const nestedPath = join(rootDir, '.local', 'errors', 'lesson', 'legacy', 'error.json');
   const taskPath = join(rootDir, '.local', 'tasks', 'lesson.json');
   await writeTask(rootDir, 'lesson', legacyTask('lesson'));
   await writeFile(flatPath, '{"legacy":true}\n');
 
   assert.deepEqual(
     await migrateLegacyTask('lesson', rootDir, {
-      beforeDiagnosticStaging: () => {
-        throw new Error('simulated staging-boundary failure');
+      afterDiagnosticLink: () => {
+        throw new Error('simulated post-link failure');
       },
     }),
     {
@@ -170,13 +171,12 @@ test('keeps the flat diagnostic recoverable when migration fails before staging'
     },
   );
   assert.equal(await readFile(flatPath, 'utf8'), '{"legacy":true}\n');
+  assert.equal(await readFile(nestedPath, 'utf8'), '{"legacy":true}\n');
   assert.equal(JSON.parse(await readFile(taskPath, 'utf8')).schemaVersion, 3);
 
   assert.deepEqual(await migrateLegacyTask('lesson', rootDir), { migrated: 1, conflicts: [] });
-  assert.equal(
-    await readFile(join(rootDir, '.local', 'errors', 'lesson', 'legacy', 'error.json'), 'utf8'),
-    '{"legacy":true}\n',
-  );
+  await assert.rejects(() => readFile(flatPath, 'utf8'), /ENOENT/);
+  assert.equal(await readFile(nestedPath, 'utf8'), '{"legacy":true}\n');
   assert.equal(JSON.parse(await readFile(taskPath, 'utf8')).schemaVersion, 4);
 });
 

@@ -43,7 +43,7 @@ export type TaskMigrationResult = {
 };
 
 export type TaskMigrationDependencies = {
-  beforeDiagnosticStaging?: () => void | Promise<void>;
+  afterDiagnosticLink?: () => void | Promise<void>;
 };
 
 export class TaskMigrationError extends Error {
@@ -63,15 +63,20 @@ function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoExcept
   return error instanceof Error && 'code' in error && error.code === code;
 }
 
-async function readRegularFile(path: string) {
+async function readRegularFileIdentity(path: string) {
   let file: FileHandle | undefined;
   try {
     file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-    if (!(await file.stat()).isFile()) throw new Error('Path is not a regular file.');
-    return await file.readFile('utf8');
+    const stats = await file.stat();
+    if (!stats.isFile()) throw new Error('Path is not a regular file.');
+    return { content: await file.readFile('utf8'), dev: stats.dev, ino: stats.ino };
   } finally {
     await file?.close();
   }
+}
+
+async function readRegularFile(path: string) {
+  return (await readRegularFileIdentity(path)).content;
 }
 
 async function ensureRealDirectory(path: string) {
@@ -92,9 +97,9 @@ async function normalizeLegacyError(
   dependencies: TaskMigrationDependencies,
 ) {
   const flatPath = join(errorsDir, `${slug}.json`);
-  let source: string;
+  let source: Awaited<ReturnType<typeof readRegularFileIdentity>>;
   try {
-    source = await readRegularFile(flatPath);
+    source = await readRegularFileIdentity(flatPath);
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT')) return true;
     return false;
@@ -105,37 +110,39 @@ async function normalizeLegacyError(
     const legacyDir = join(taskErrorDir, 'legacy');
     await ensureRealDirectory(taskErrorDir);
     await ensureRealDirectory(legacyDir);
-    await dependencies.beforeDiagnosticStaging?.();
   } catch {
     return false;
   }
 
   const legacyDir = join(errorsDir, slug, 'legacy');
   const targetPath = join(legacyDir, 'error.json');
-  const stagingPath = join(errorsDir, `.${slug}.${randomUUID()}.legacy-error.tmp`);
-  try {
-    await rename(flatPath, stagingPath);
-  } catch {
-    return false;
-  }
-
+  let linked = false;
   try {
     try {
-      await link(stagingPath, targetPath);
+      await link(flatPath, targetPath);
+      linked = true;
     } catch (error) {
       if (!hasErrorCode(error, 'EEXIST')) throw error;
-      if ((await readRegularFile(targetPath)) !== source) throw new Error('Diagnostic target conflict.');
     }
 
-    await unlink(stagingPath);
+    if (linked) await dependencies.afterDiagnosticLink?.();
+
+    const currentFlat = await readRegularFileIdentity(flatPath);
+    const currentTarget = await readRegularFileIdentity(targetPath);
+    if (
+      currentFlat.dev !== source.dev ||
+      currentFlat.ino !== source.ino ||
+      currentFlat.content !== source.content ||
+      currentTarget.dev !== currentFlat.dev ||
+      currentTarget.ino !== currentFlat.ino ||
+      currentTarget.content !== currentFlat.content
+    ) {
+      return false;
+    }
+
+    await unlink(flatPath);
     return true;
   } catch {
-    try {
-      await link(stagingPath, flatPath);
-      await unlink(stagingPath);
-    } catch {
-      // Keep the uniquely named staging file when the original pathname is no longer available.
-    }
     return false;
   }
 }
