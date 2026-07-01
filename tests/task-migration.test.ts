@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   access,
   mkdir,
@@ -154,6 +155,28 @@ test('orders legacy tasks oldest first and converges identical sources on one st
   const story = JSON.parse(await readFile(join(rootDir, '.local', 'stories', `${videoId}.json`), 'utf8'));
   assert.equal(story.createdAt, '2026-06-19T08:00:00.000Z');
   assert.deepEqual(await readdir(join(rootDir, '.local', 'stories')), [`${videoId}.json`]);
+});
+
+test('batch migration continues when a candidate is deleted after the initial scan', async () => {
+  const { migrateLegacyTasks } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-deleted-candidate-');
+  await writeTask(rootDir, 'a-deleted', legacyTask('a-deleted'));
+  await writeTask(rootDir, 'b-kept', legacyTask('b-kept'));
+
+  assert.deepEqual(
+    await migrateLegacyTasks(rootDir, {
+      beforeCandidate: async (slug) => {
+        if (slug === 'a-deleted') {
+          await rm(join(rootDir, '.local', 'tasks', 'a-deleted.json'));
+        }
+      },
+    }),
+    { migrated: 1, conflicts: [] },
+  );
+  assert.equal(
+    JSON.parse(await readFile(join(rootDir, '.local', 'tasks', 'b-kept.json'), 'utf8')).schemaVersion,
+    4,
+  );
 });
 
 test('retains the oldest source and leaves a conflicting same-video legacy task recoverable', async () => {
@@ -491,23 +514,129 @@ test('migration and generation update wait on the same filesystem task lock', as
   assert.equal(finalTask.generation.completedAt, '2026-06-22T08:00:00.000Z');
 });
 
+test('recovers an expired task lock even when its recorded PID is alive', async () => {
+  const { withTaskFileLock } = await import('@/lib/server/task-file-lock.ts');
+  const rootDir = await localRoot('task-file-lock-live-pid-recovery-');
+  const lockDir = join(rootDir, '.local', 'tasks', '.lesson.task.lock');
+  await mkdir(lockDir);
+  await writeFile(join(lockDir, 'owner.json'), JSON.stringify({ pid: process.pid, token: 'expired' }));
+  const staleTime = new Date(Date.now() - 10 * 60_000);
+  await utimes(lockDir, staleTime, staleTime);
+  let entered = false;
+  const acquisition = withTaskFileLock(
+    rootDir,
+    'lesson',
+    async () => {
+      entered = true;
+    },
+    { staleAfterMs: 25, pollMs: 2 },
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 75));
+  try {
+    assert.equal(entered, true);
+  } finally {
+    if (!entered) await rm(lockDir, { recursive: true, force: true });
+    await acquisition;
+  }
+});
+
+test('lease heartbeat prevents recovery while a long task operation is still running', async () => {
+  const { withTaskFileLock } = await import('@/lib/server/task-file-lock.ts');
+  const rootDir = await localRoot('task-file-lock-heartbeat-');
+  let notifyEntered!: () => void;
+  const firstEntered = new Promise<void>((resolve) => {
+    notifyEntered = resolve;
+  });
+  let releaseFirst!: () => void;
+  const holdFirst = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let secondEntered = false;
+  const options = { staleAfterMs: 30, pollMs: 2 };
+
+  const first = withTaskFileLock(
+    rootDir,
+    'lesson',
+    async () => {
+      notifyEntered();
+      await holdFirst;
+    },
+    options,
+  );
+  await firstEntered;
+  const second = withTaskFileLock(
+    rootDir,
+    'lesson',
+    async () => {
+      secondEntered = true;
+    },
+    options,
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  assert.equal(secondEntered, false);
+  releaseFirst();
+  await Promise.all([first, second]);
+  assert.equal(secondEntered, true);
+});
+
+test('a crashed legacy recovery claim cannot block stale lock recovery forever', async () => {
+  const { withTaskFileLock } = await import('@/lib/server/task-file-lock.ts');
+  const rootDir = await localRoot('task-file-lock-legacy-claim-');
+  const lockDir = join(rootDir, '.local', 'tasks', '.lesson.task.lock');
+  const legacyClaim = `${lockDir}.recovery`;
+  await mkdir(lockDir);
+  await writeFile(join(lockDir, 'owner.json'), JSON.stringify({ pid: 2_147_483_647, token: 'stale' }));
+  await mkdir(legacyClaim);
+  const staleTime = new Date(Date.now() - 10 * 60_000);
+  await utimes(lockDir, staleTime, staleTime);
+  await utimes(legacyClaim, staleTime, staleTime);
+  let entered = false;
+  const acquisition = withTaskFileLock(
+    rootDir,
+    'lesson',
+    async () => {
+      entered = true;
+    },
+    { staleAfterMs: 25, pollMs: 2 },
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 75));
+  try {
+    assert.equal(entered, true);
+  } finally {
+    if (!entered) await rm(legacyClaim, { recursive: true, force: true });
+    await acquisition;
+  }
+});
+
 test('multiple processes recover one stale task lock without overlapping a fresh owner', async () => {
   const rootDir = await localRoot('task-file-lock-process-recovery-');
   const lockDir = join(rootDir, '.local', 'tasks', '.lesson.task.lock');
-  const recoveryClaim = `${lockDir}.recovery`;
+  const ownerToken = 'stale';
+  const ownerHash = createHash('sha256').update(ownerToken).digest('hex');
+  const recoveryClaim = `${lockDir}.recovery.${ownerHash}`;
   await mkdir(lockDir);
   await mkdir(recoveryClaim);
-  await writeFile(join(lockDir, 'owner.json'), JSON.stringify({ pid: 2_147_483_647, token: 'stale' }));
+  await writeFile(join(lockDir, 'owner.json'), JSON.stringify({ pid: 2_147_483_647, token: ownerToken }));
+  await writeFile(
+    join(recoveryClaim, 'owner.json'),
+    JSON.stringify({
+      pid: 2_147_483_647,
+      token: 'crashed-recoverer',
+      createdAt: '2020-01-01T00:00:00.000Z',
+    }),
+  );
   const staleTime = new Date(Date.now() - 10 * 60_000);
   await utimes(lockDir, staleTime, staleTime);
+  await utimes(recoveryClaim, staleTime, staleTime);
   const labels = Array.from({ length: 12 }, (_, index) => `worker-${index}`);
   const workers = labels.map((label) => runLockWorker(rootDir, label));
   await waitForPaths(labels.map((label) => join(rootDir, '.task-lock-ready', label)));
   await writeFile(join(rootDir, '.task-lock-start'), 'start');
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  await assert.rejects(() => access(join(rootDir, '.task-lock-entered')), /ENOENT/);
-  await rm(recoveryClaim, { recursive: true });
 
   await Promise.all(workers);
   await assert.rejects(() => access(join(rootDir, '.task-lock-overlap')), /ENOENT/);
+  await assert.rejects(() => access(recoveryClaim), /ENOENT/);
 });

@@ -48,6 +48,10 @@ export type TaskMigrationDependencies = {
   afterDiagnosticLink?: () => void | Promise<void>;
 };
 
+export type TaskMigrationBatchDependencies = {
+  beforeCandidate?: (slug: string) => void | Promise<void>;
+};
+
 export class TaskMigrationError extends Error {
   constructor(readonly reason: TaskMigrationConflictReason) {
     super(`Legacy task migration failed: ${reason}.`);
@@ -326,7 +330,10 @@ export async function migrateLegacyTask(
   });
 }
 
-export async function migrateLegacyTasks(rootDir?: string): Promise<TaskMigrationResult> {
+export async function migrateLegacyTasks(
+  rootDir?: string,
+  dependencies: TaskMigrationBatchDependencies = {},
+): Promise<TaskMigrationResult> {
   const paths = await ensureLocalDirs(rootDir);
   const entries = (await readdir(paths.tasksDir, { withFileTypes: true }))
     .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
@@ -354,9 +361,14 @@ export async function migrateLegacyTasks(rootDir?: string): Promise<TaskMigratio
   );
   let migrated = 0;
   for (const candidate of candidates) {
-    const result = await migrateLegacyTask(candidate.slug, paths.rootDir);
-    migrated += result.migrated;
-    conflicts.push(...result.conflicts);
+    await dependencies.beforeCandidate?.(candidate.slug);
+    try {
+      const result = await migrateLegacyTask(candidate.slug, paths.rootDir);
+      migrated += result.migrated;
+      conflicts.push(...result.conflicts);
+    } catch (error) {
+      if (!hasErrorCode(error, 'ENOENT')) throw error;
+    }
   }
   return { migrated, conflicts };
 }
