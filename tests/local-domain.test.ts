@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { lessonSchema, type LessonContent } from '@/lib/lesson-content.ts';
+import { createLearningPageTree } from '@/lib/lessons-page-tree.ts';
 import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/youtube.ts';
 import { buildTaskFile, TaskCreationError } from '@/lib/server/tasks.ts';
 import { readTask, updateTaskGeneration } from '@/lib/server/task-store.ts';
@@ -50,6 +51,25 @@ async function writeStoryFixture(rootDir: string, id = 'jNQXAC9IVRw') {
     }),
   );
 }
+
+test('createLearningPageTree uses Tasks as the lesson index', () => {
+  const tree = createLearningPageTree([
+    {
+      slug: 'lesson-task',
+      title: 'Lesson title',
+      filename: 'lesson-task.json',
+      path: '.local/lessons/lesson-task.json',
+      modifiedAt: '2026-06-30T09:00:00.000Z',
+      generatedAt: '2026-06-30T09:00:00.000Z',
+    },
+  ]);
+  const serialized = JSON.stringify(tree);
+
+  assert.match(serialized, /\/get-started/);
+  assert.match(serialized, /\/tasks/);
+  assert.match(serialized, /\/lessons\/lesson-task/);
+  assert.doesNotMatch(serialized, /All Lessons/);
+});
 
 test('parseYouTubeVideoId accepts common YouTube URL shapes', () => {
   assert.equal(parseYouTubeVideoId('https://www.youtube.com/watch?v=jNQXAC9IVRw'), 'jNQXAC9IVRw');

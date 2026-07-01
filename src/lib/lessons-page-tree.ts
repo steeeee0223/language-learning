@@ -2,15 +2,11 @@ import type { Root } from 'fumadocs-core/page-tree';
 
 import type { LessonListItem } from './server/lessons';
 
-export function createLessonsPageTree(lessons: LessonListItem[]): Root {
+export function createLearningPageTree(lessons: LessonListItem[]): Root {
   return {
     type: 'root',
     name: 'Language Learning',
     children: [
-      {
-        type: 'separator',
-        name: 'Get Started',
-      },
       {
         type: 'page',
         name: 'Get Started',
@@ -18,12 +14,12 @@ export function createLessonsPageTree(lessons: LessonListItem[]): Root {
       },
       {
         type: 'separator',
-        name: 'Generated Lessons',
+        name: 'Tasks and Lessons',
       },
       {
         type: 'page',
-        name: 'All Lessons',
-        url: '/lessons',
+        name: 'Tasks',
+        url: '/tasks',
       },
       ...lessons.map((lesson) => ({
         type: 'page' as const,
