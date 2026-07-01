@@ -1,282 +1,265 @@
 'use client';
 
-import { useMutation } from '@tanstack/react-query';
-import { CheckCircle2, ClipboardList, Loader2, Play, Wand2 } from 'lucide-react';
-import { FormEvent, useMemo, useState } from 'react';
-import type { ZodType } from 'zod';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Loader2, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, type FormEvent } from 'react';
 
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Button } from '@/components/ui/button.tsx';
+import { Checkbox } from '@/components/ui/checkbox.tsx';
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field.tsx';
+import { Input } from '@/components/ui/input.tsx';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group.tsx';
 import {
   cefrLevels,
-  transcriptBundleSchema,
   type CefrLevel,
   type LearningSettings,
-} from '@/lib/contracts';
-import { apiErrorResponseSchema, taskCreationResponseSchema } from '@/lib/generation-contracts';
-import { parseYouTubeVideoId } from '@/lib/youtube';
+  type TaskCreationRequest,
+} from '@/lib/contracts.ts';
+import {
+  apiErrorResponseSchema,
+  codexStatusSchema,
+  generateLessonResponseSchema,
+  taskCreationResponseSchema,
+  type ModelPreset,
+} from '@/lib/generation-contracts.ts';
+import {
+  storyResponseSchema,
+  type StorySummary,
+} from '@/lib/task-contracts.ts';
+import { parseYouTubeVideoId } from '@/lib/youtube.ts';
 
-import { CodexGenerationStep } from './codex-generation-step';
+type Post = (url: string, body: unknown) => Promise<unknown>;
 
-async function postJson<T>(url: string, body: unknown, schema: ZodType<T>): Promise<T> {
+async function postJson(url: string, body: unknown) {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const payload: unknown = await response.json().catch(() => null);
-
   if (!response.ok) {
     const error = apiErrorResponseSchema.safeParse(payload);
     throw new Error(error.success ? error.data.error : 'Request failed.');
   }
-
-  return schema.parse(payload);
+  return payload;
 }
 
-export function GetStartedClient() {
+export async function submitLessonGeneration(input: TaskCreationRequest, post: Post = postJson) {
+  const task = taskCreationResponseSchema.parse(await post('/api/tasks', input));
+  return generateLessonResponseSchema.parse(
+    await post(`/api/tasks/${task.taskId}/generate`, {}),
+  );
+}
+
+const modelOptions: Array<[ModelPreset, string]> = [
+  ['auto', 'Auto'],
+  ['fast', 'Fast'],
+  ['best', 'Best quality'],
+];
+
+export function GetStartedClient({ initialStory }: { initialStory?: StorySummary }) {
+  const router = useRouter();
   const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [targetLanguage, setTargetLanguage] = useState<LearningSettings['targetLanguage']>('zh');
+  const [story, setStory] = useState(initialStory);
+  const [targetLanguage, setTargetLanguage] =
+    useState<LearningSettings['targetLanguage']>('zh');
   const [selectedLevels, setSelectedLevels] = useState<CefrLevel[]>(['A2', 'B1']);
-  const [clientError, setClientError] = useState<string | null>(null);
-  const [generationPending, setGenerationPending] = useState(false);
-
-  const transcriptMutation = useMutation({
-    mutationFn: (url: string) => postJson('/api/transcripts', { url }, transcriptBundleSchema),
-  });
-  const taskMutation = useMutation({
-    mutationFn: (settings: LearningSettings) => {
-      if (!transcriptMutation.data) {
-        throw new Error('Fetch a transcript first.');
-      }
-
-      return postJson(
-        '/api/tasks',
-        {
-          ...transcriptMutation.data,
-          learningSettings: settings,
-        },
-        taskCreationResponseSchema,
-      );
+  const [modelPreset, setModelPreset] = useState<ModelPreset>('best');
+  const [clientError, setClientError] = useState<string>();
+  const statusQuery = useQuery({
+    queryKey: ['codex-status'],
+    queryFn: async () => {
+      const response = await fetch('/api/codex/status');
+      if (!response.ok) throw new Error('Codex status check failed.');
+      return codexStatusSchema.parse(await response.json());
     },
   });
+  const storyMutation = useMutation({
+    mutationFn: async (url: string) =>
+      storyResponseSchema.parse(await postJson('/api/stories', { url })).story,
+    onSuccess: setStory,
+  });
+  const generation = useMutation({
+    mutationFn: async () => {
+      if (!story) throw new Error('Add a YouTube story first.');
+      if (selectedLevels.length === 0) throw new Error('Select at least one CEFR level.');
+      return submitLessonGeneration({
+        storyId: story.id,
+        learningSettings: { targetLanguage, cefrLevels: selectedLevels },
+        modelPreset,
+      });
+    },
+    onSuccess: ({ lessonSlug }) => router.push(`/lessons/${lessonSlug}`),
+  });
 
-  const transcriptPreview = useMemo(() => {
-    const segments = transcriptMutation.data?.transcript.segments ?? [];
-    return segments
-      .slice(0, 5)
-      .map((segment) => segment.text)
-      .join(' ');
-  }, [transcriptMutation.data]);
-
-  function submitUrl(event: FormEvent<HTMLFormElement>) {
+  function submitStory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (generationPending) {
-      return;
-    }
-
-    setClientError(null);
-    taskMutation.reset();
-
+    setClientError(undefined);
     try {
       parseYouTubeVideoId(youtubeUrl);
-      transcriptMutation.mutate(youtubeUrl);
+      storyMutation.mutate(youtubeUrl);
     } catch (error) {
       setClientError(error instanceof Error ? error.message : 'Enter a valid YouTube URL.');
     }
   }
 
   function toggleLevel(level: CefrLevel) {
-    if (generationPending) {
-      return;
-    }
-
-    taskMutation.reset();
     setSelectedLevels((current) =>
       current.includes(level) ? current.filter((item) => item !== level) : [...current, level],
     );
   }
 
-  function selectTargetLanguage(value: LearningSettings['targetLanguage']) {
-    if (generationPending) {
-      return;
-    }
-
-    setTargetLanguage(value);
-    taskMutation.reset();
-  }
-
-  function submitTask(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (generationPending) {
-      return;
-    }
-
-    if (selectedLevels.length === 0) {
-      setClientError('Select at least one CEFR level.');
-      return;
-    }
-
-    setClientError(null);
-    taskMutation.mutate({ targetLanguage, cefrLevels: selectedLevels });
-  }
+  const isGenerating = generation.isPending;
+  const error = clientError ?? storyMutation.error?.message ?? generation.error?.message;
 
   return (
-    <div className="not-prose grid gap-5">
-        <section className="rounded-md border bg-card p-5 text-card-foreground">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Play className="size-4" aria-hidden />
-            </div>
-            <h2 className="text-lg font-semibold text-foreground">1. Fetch transcript</h2>
+    <div className="not-prose flex flex-col gap-5">
+      <section className="rounded-md border bg-card p-5 text-card-foreground">
+        <h2 className="text-lg font-semibold">1. YouTube story</h2>
+        {story ? (
+          <div className="mt-4 flex flex-col gap-1 text-sm">
+            <span className="font-medium">{story.title}</span>
+            <span className="font-mono text-muted-foreground">{story.id}</span>
           </div>
-          <form className="mt-5 flex flex-col gap-4" onSubmit={submitUrl}>
-            <Field data-disabled={generationPending}>
+        ) : (
+          <form className="mt-4 flex flex-col gap-4" onSubmit={submitStory}>
+            <Field data-disabled={isGenerating}>
               <FieldLabel htmlFor="youtube-url">YouTube video URL</FieldLabel>
               <Input
                 id="youtube-url"
-                className="h-10"
-                placeholder="https://www.youtube.com/watch?v=..."
                 value={youtubeUrl}
-                disabled={generationPending}
+                disabled={isGenerating}
+                placeholder="https://www.youtube.com/watch?v=..."
                 onChange={(event) => setYoutubeUrl(event.target.value)}
               />
             </Field>
             <Button
               className="w-fit"
-              size="lg"
               type="submit"
-              disabled={generationPending || transcriptMutation.isPending}
+              disabled={isGenerating || storyMutation.isPending}
             >
-              {transcriptMutation.isPending ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : <Wand2 data-icon="inline-start" aria-hidden />}
-              Fetch Transcript
+              {storyMutation.isPending ? (
+                <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden />
+              ) : null}
+              Add story
             </Button>
           </form>
+        )}
+      </section>
 
-          {(clientError || transcriptMutation.error) && (
-            <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {clientError ?? transcriptMutation.error?.message}
-            </p>
-          )}
-
-          {transcriptMutation.data && (
-            <div className="mt-5 rounded-md bg-muted p-4">
-              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <CheckCircle2 className="size-4" aria-hidden />
-                Transcript ready
-              </div>
-              <dl className="mt-4 grid gap-3 text-sm">
-                <div>
-                  <dt className="font-medium text-muted-foreground">Title</dt>
-                  <dd className="mt-1 text-foreground">{transcriptMutation.data.video.title}</dd>
-                </div>
-                <div>
-                  <dt className="font-medium text-muted-foreground">Video ID</dt>
-                  <dd className="mt-1 font-mono text-foreground">{transcriptMutation.data.video.id}</dd>
-                </div>
-                <div>
-                  <dt className="font-medium text-muted-foreground">Preview</dt>
-                  <dd className="mt-1 leading-6 text-foreground">{transcriptPreview}</dd>
-                </div>
-              </dl>
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-md border bg-card p-5 text-card-foreground">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-md bg-emerald-700 text-white">
-              <ClipboardList className="size-4" aria-hidden />
-            </div>
-            <h2 className="text-lg font-semibold text-foreground">2. Learning settings</h2>
-          </div>
-          <form className="mt-5 flex flex-col gap-5" onSubmit={submitTask}>
-            <FieldSet>
-              <FieldLegend variant="label">Target translation language</FieldLegend>
-              <RadioGroup
-                className="grid-cols-2"
-                disabled={generationPending}
-                value={targetLanguage}
-                onValueChange={(value) =>
-                  selectTargetLanguage(value as LearningSettings['targetLanguage'])
-                }
-              >
-                {[
-                  ['zh', 'Chinese'],
-                  ['en', 'English'],
-                ].map(([value, label]) => (
-                  <Field
-                    key={value}
-                    data-disabled={generationPending}
-                    orientation="horizontal"
-                    className="h-10 rounded-md border px-3"
-                  >
-                    <RadioGroupItem
-                      id={`target-language-${value}`}
-                      value={value}
-                      disabled={generationPending}
-                    />
-                    <FieldLabel htmlFor={`target-language-${value}`}>{label}</FieldLabel>
-                  </Field>
-                ))}
-              </RadioGroup>
-            </FieldSet>
-
-            <FieldSet>
-              <FieldLegend variant="label">CEFR levels</FieldLegend>
-              <FieldGroup className="grid grid-cols-3 gap-2">
-                {cefrLevels.map((level) => (
-                  <Field
-                    key={level}
-                    data-disabled={generationPending}
-                    orientation="horizontal"
-                    className="h-10 rounded-md border px-3"
-                  >
-                    <Checkbox
-                      id={`cefr-${level}`}
-                      checked={selectedLevels.includes(level)}
-                      disabled={generationPending}
-                      onCheckedChange={() => toggleLevel(level)}
-                    />
-                    <FieldLabel htmlFor={`cefr-${level}`}>{level}</FieldLabel>
-                  </Field>
-                ))}
-              </FieldGroup>
-            </FieldSet>
-
-            <Button
-              className="w-fit"
-              size="lg"
-              type="submit"
-              disabled={
-                generationPending || !transcriptMutation.data || taskMutation.isPending
+      <section className="rounded-md border bg-card p-5 text-card-foreground">
+        <h2 className="text-lg font-semibold">2. Lesson settings</h2>
+        <form
+          className="mt-4 flex flex-col gap-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            generation.mutate();
+          }}
+        >
+          <FieldSet disabled={isGenerating}>
+            <FieldLegend variant="label">Target translation language</FieldLegend>
+            <RadioGroup
+              className="grid-cols-2"
+              value={targetLanguage}
+              onValueChange={(value) =>
+                setTargetLanguage(value as LearningSettings['targetLanguage'])
               }
             >
-              {taskMutation.isPending ? <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden /> : <ClipboardList data-icon="inline-start" aria-hidden />}
-              Prepare Lesson
+              {[
+                ['zh', 'Chinese'],
+                ['en', 'English'],
+              ].map(([value, label]) => (
+                <Field key={value} orientation="horizontal" className="rounded-md border p-3">
+                  <RadioGroupItem id={`language-${value}`} value={value} />
+                  <FieldLabel htmlFor={`language-${value}`}>{label}</FieldLabel>
+                </Field>
+              ))}
+            </RadioGroup>
+          </FieldSet>
+
+          <FieldSet disabled={isGenerating}>
+            <FieldLegend variant="label">CEFR levels</FieldLegend>
+            <FieldGroup className="grid grid-cols-3 gap-2">
+              {cefrLevels.map((level) => (
+                <Field key={level} orientation="horizontal" className="rounded-md border p-3">
+                  <Checkbox
+                    id={`cefr-${level}`}
+                    checked={selectedLevels.includes(level)}
+                    onCheckedChange={() => toggleLevel(level)}
+                  />
+                  <FieldLabel htmlFor={`cefr-${level}`}>{level}</FieldLabel>
+                </Field>
+              ))}
+            </FieldGroup>
+          </FieldSet>
+
+          <FieldSet disabled={isGenerating}>
+            <FieldLegend variant="label">Model</FieldLegend>
+            <RadioGroup
+              value={modelPreset}
+              onValueChange={(value) => setModelPreset(value as ModelPreset)}
+            >
+              {modelOptions.map(([value, label]) => (
+                <Field key={value} orientation="horizontal" className="rounded-md border p-3">
+                  <RadioGroupItem id={`model-${value}`} value={value} />
+                  <FieldLabel htmlFor={`model-${value}`}>{label}</FieldLabel>
+                </Field>
+              ))}
+            </RadioGroup>
+          </FieldSet>
+
+          <div className="flex items-center gap-3 text-sm">
+            <span role="status">
+              Codex: {statusQuery.isPending ? 'Checking…' : statusQuery.data?.status ?? 'Unavailable'}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={statusQuery.isFetching}
+              onClick={() => statusQuery.refetch()}
+            >
+              <RefreshCw data-icon="inline-start" aria-hidden />
+              Check again
             </Button>
-          </form>
+          </div>
 
-          {taskMutation.error && (
-            <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{taskMutation.error.message}</p>
-          )}
+          {statusQuery.data?.status === 'not-authenticated' ? (
+            <p className="text-sm text-muted-foreground">
+              Sign in with <code>pnpm exec codex login</code>, then check again.
+            </p>
+          ) : null}
+          {statusQuery.data?.status === 'not-installed' ? (
+            <p className="text-sm text-muted-foreground">
+              Run <code>pnpm install</code> to install the local Codex runtime.
+            </p>
+          ) : null}
 
-          {taskMutation.data && (
-            <div className="mt-5 flex flex-col gap-3 rounded-md bg-muted p-4 text-sm">
-              <p className="font-medium text-foreground">Task ready</p>
-              <p className="font-mono text-muted-foreground">{taskMutation.data.taskPath}</p>
-              <p className="font-mono text-muted-foreground">{taskMutation.data.outputPath}</p>
-            </div>
-          )}
-        </section>
-        <CodexGenerationStep
-          key={`${taskMutation.submittedAt}:${taskMutation.data?.taskSlug ?? 'unprepared'}`}
-          taskSlug={taskMutation.data?.taskSlug ?? null}
-          onPendingChange={setGenerationPending}
-        />
+          <p className="text-sm text-muted-foreground">
+            The transcript is processed through your own signed-in Codex account and usage allowance.
+          </p>
+          <Button
+            className="w-fit"
+            size="lg"
+            type="submit"
+            disabled={!story || statusQuery.data?.status !== 'ready' || isGenerating}
+          >
+            {isGenerating ? (
+              <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden />
+            ) : null}
+            {isGenerating ? 'Generating lesson…' : 'Generate lesson'}
+          </Button>
+        </form>
+
+        {error ? (
+          <div role="alert" className="mt-4 flex flex-col gap-2 text-sm text-destructive">
+            <p>{error}</p>
+            {generation.error ? <Link href="/tasks">Open Tasks to recover</Link> : null}
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }
