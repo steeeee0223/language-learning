@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { normalizedTranscriptSchema, videoMetadataSchema } from '@/lib/contracts';
 
-export const STORY_SCHEMA_VERSION = 1 as const;
+const STORY_SCHEMA_VERSION = 1 as const;
 
 export const storySchema = z
   .strictObject({

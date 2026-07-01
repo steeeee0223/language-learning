@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server.js';
 
-import { lessonToPlainText } from '../../../../lib/lesson-content.ts';
-import { getErrorMessage, jsonError } from '../../../../lib/server/http.ts';
-import { readLesson } from '../../../../lib/server/lessons.ts';
+import { lessonToPlainText } from '@/lib/lesson-content.ts';
+import { getErrorMessage, jsonError } from '@/lib/server/http.ts';
+import { readLesson } from '@/lib/server/lessons.ts';
 
 export async function POST(request: Request) {
   try {

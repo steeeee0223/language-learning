@@ -5,10 +5,10 @@ import {
   generateLessonRequestSchema,
   generateLessonResponseSchema,
   localSlugSchema,
-} from '../../../../../lib/generation-contracts.ts';
-import { generateLesson } from '../../../../../lib/server/generate-lesson.ts';
-import { GenerationError } from '../../../../../lib/server/generation-errors.ts';
-import { jsonError } from '../../../../../lib/server/http.ts';
+} from '@/lib/generation-contracts.ts';
+import { generateLesson } from '@/lib/server/generate-lesson.ts';
+import { GenerationError } from '@/lib/server/generation-errors.ts';
+import { jsonError } from '@/lib/server/http.ts';
 
 export const runtime = 'nodejs';
 

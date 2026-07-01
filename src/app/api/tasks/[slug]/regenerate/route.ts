@@ -4,10 +4,10 @@ import { z } from 'zod';
 import {
   localSlugSchema,
   taskCreationResponseSchema,
-} from '../../../../../lib/generation-contracts.ts';
-import { GenerationError } from '../../../../../lib/server/generation-errors.ts';
-import { jsonError } from '../../../../../lib/server/http.ts';
-import { regenerateTask } from '../../../../../lib/server/task-lifecycle.ts';
+} from '@/lib/generation-contracts.ts';
+import { GenerationError } from '@/lib/server/generation-errors.ts';
+import { jsonError } from '@/lib/server/http.ts';
+import { regenerateTask } from '@/lib/server/task-lifecycle.ts';
 
 const paramsSchema = z.strictObject({ slug: localSlugSchema });
 const requestSchema = z.strictObject({});

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server.js';
 
-import { taskCreationRequestSchema } from '../../../lib/contracts.ts';
-import { taskCreationResponseSchema } from '../../../lib/generation-contracts.ts';
-import { taskListResponseSchema } from '../../../lib/task-contracts.ts';
-import { jsonError } from '../../../lib/server/http.ts';
-import { listTaskGroups } from '../../../lib/server/task-queries.ts';
-import { buildTaskFile, TaskCreationError } from '../../../lib/server/tasks.ts';
+import { taskCreationRequestSchema } from '@/lib/contracts.ts';
+import { taskCreationResponseSchema } from '@/lib/generation-contracts.ts';
+import { taskListResponseSchema } from '@/lib/task-contracts.ts';
+import { jsonError } from '@/lib/server/http.ts';
+import { listTaskGroups } from '@/lib/server/task-queries.ts';
+import { buildTaskFile, TaskCreationError } from '@/lib/server/tasks.ts';
 
 export async function POST(request: Request) {
   try {

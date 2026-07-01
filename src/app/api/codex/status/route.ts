@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server.js';
 
-import { codexStatusSchema } from '../../../../lib/generation-contracts.ts';
-import { getCodexStatus } from '../../../../lib/server/codex-status.ts';
-import { jsonError } from '../../../../lib/server/http.ts';
+import { codexStatusSchema } from '@/lib/generation-contracts.ts';
+import { getCodexStatus } from '@/lib/server/codex-status.ts';
+import { jsonError } from '@/lib/server/http.ts';
 
 export const runtime = 'nodejs';
 
