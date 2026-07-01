@@ -13,13 +13,13 @@ export function createLearningPageTree(lessons: LessonListItem[]): Root {
         url: '/get-started',
       },
       {
-        type: 'separator',
-        name: 'Tasks and Lessons',
-      },
-      {
         type: 'page',
         name: 'Tasks',
         url: '/tasks',
+      },
+      {
+        type: 'separator',
+        name: 'Lessons',
       },
       ...lessons.map((lesson) => ({
         type: 'page' as const,

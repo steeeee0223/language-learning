@@ -78,6 +78,18 @@ test('listTaskGroups groups task summaries without transcripts', async () => {
   assert.equal(JSON.stringify(result).includes('Here we are.'), false);
 });
 
+test('listTaskGroups skips migration-conflicted task files', async () => {
+  const { rootDir, paths, task } = await createFixture();
+  const legacyPath = join(paths.tasksDir, 'unsupported-legacy.json');
+  const legacySource = '{"schemaVersion":1}\n';
+  await writeFile(legacyPath, legacySource);
+
+  const result = await listTaskGroups(rootDir);
+
+  assert.deepEqual(result.groups.flatMap((group) => group.tasks.map(({ id }) => id)), [task.id]);
+  assert.equal(await readFile(legacyPath, 'utf8'), legacySource);
+});
+
 test('regenerateTask copies settings and deleteTask removes task artifacts', async () => {
   const { rootDir, paths, task } = await createFixture();
   const result = await regenerateTask(

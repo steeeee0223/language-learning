@@ -15,7 +15,7 @@ export const storyResponseSchema = z.strictObject({
   reused: z.boolean(),
 });
 
-export const taskSummarySchema = z.strictObject({
+const taskSummarySchema = z.strictObject({
   id: localSlugSchema,
   status: z.enum(['pending', 'succeeded', 'failed']),
   cefrLevels: z.array(cefrLevelSchema).nonempty(),
@@ -25,7 +25,7 @@ export const taskSummarySchema = z.strictObject({
   lessonUrl: z.string().startsWith('/lessons/').optional(),
 });
 
-export const taskGroupSchema = z.strictObject({
+const taskGroupSchema = z.strictObject({
   story: storySummarySchema,
   tasks: z.array(taskSummarySchema),
 });
@@ -35,5 +35,4 @@ export const taskListResponseSchema = z.strictObject({
 });
 
 export type StorySummary = z.infer<typeof storySummarySchema>;
-export type StoryResponse = z.infer<typeof storyResponseSchema>;
 export type TaskListResponse = z.infer<typeof taskListResponseSchema>;
