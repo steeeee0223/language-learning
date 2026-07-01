@@ -30,7 +30,6 @@ export async function POST(request: Request, context: GenerateRouteContext) {
 
     const result = await generateLesson({
       slug: params.data.slug,
-      modelPreset: payload.data.modelPreset,
       signal: request.signal,
     });
     return NextResponse.json(generateLessonResponseSchema.parse(result));

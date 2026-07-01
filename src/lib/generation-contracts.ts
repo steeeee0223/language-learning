@@ -10,9 +10,7 @@ export const codexStatusSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('not-authenticated'), version: z.string().min(1) }),
 ]);
 
-export const generateLessonRequestSchema = z.strictObject({
-  modelPreset: modelPresetSchema,
-});
+export const generateLessonRequestSchema = z.strictObject({});
 
 export const taskCreationResponseSchema = z.strictObject({
   taskId: localSlugSchema,

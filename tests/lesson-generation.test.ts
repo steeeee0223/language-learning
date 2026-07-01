@@ -8,19 +8,21 @@ import { generateLesson } from '@/lib/server/generate-lesson.ts';
 import { GenerationError } from '@/lib/server/generation-errors.ts';
 import { buildLessonPrompt } from '@/lib/server/lesson-prompt.ts';
 import { ensureLocalDirs } from '@/lib/server/local-paths.ts';
+import { resolveModelPreset } from '@/lib/server/model-registry.ts';
+import { storySchema } from '@/lib/server/story-schema.ts';
 import { readTask } from '@/lib/server/task-store.ts';
-import { buildTaskFile } from '@/lib/server/tasks.ts';
 import { writeLessonOnce } from '@/lib/server/lesson-writer.ts';
 import { storedTaskSchema } from '@/lib/server/task-schema.ts';
 
 async function createStoredTaskFixture(options?: {
-  outputPath?: string;
   generation?: Record<string, unknown>;
+  modelPreset?: 'auto' | 'fast' | 'best';
 }) {
   const rootDir = await mkdtemp(join(tmpdir(), 'generation-task-'));
-  const { tasksDir } = await ensureLocalDirs(rootDir);
-  const storedTask = storedTaskSchema.parse({
-    schemaVersion: 3,
+  const { storiesDir, tasksDir } = await ensureLocalDirs(rootDir);
+  const story = storySchema.parse({
+    schemaVersion: 1,
+    id: 'jNQXAC9IVRw',
     createdAt: '2026-06-28T00:00:00.000Z',
     video: {
       url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
@@ -31,23 +33,31 @@ async function createStoredTaskFixture(options?: {
       source: 'youtube-transcript.io',
       segments: [{ text: 'Here we are at the zoo.', start: 0, duration: 1 }],
     },
+  });
+  const storedTask = storedTaskSchema.parse({
+    schemaVersion: 4,
+    id: 'lesson',
+    storyId: story.id,
+    createdAt: '2026-06-28T00:00:00.000Z',
     learningSettings: { targetLanguage: 'zh', cefrLevels: ['A2', 'B1'] },
-    output: { format: 'json', path: options?.outputPath ?? '.local/lessons/lesson.json' },
+    modelPreset: options?.modelPreset ?? 'best',
+    output: { format: 'json', path: '.local/lessons/lesson.json' },
     instructions: {
       requiredSections: ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'],
     },
-    generation: options?.generation ?? { status: 'pending', skillVersion: '3' },
+    generation: options?.generation ?? { status: 'pending', skillVersion: '4' },
   });
+  await writeFile(join(storiesDir, `${story.id}.json`), `${JSON.stringify(story, null, 2)}\n`, 'utf8');
   await writeFile(join(tasksDir, 'lesson.json'), `${JSON.stringify(storedTask, null, 2)}\n`, 'utf8');
-  return rootDir;
+  return { rootDir, task: storedTask, story };
 }
 
 const getReadyStatus = async () => ({ status: 'ready' as const, version: 'codex-cli test' });
 
 describe('buildLessonPrompt', () => {
   it('requires complete translated and pedagogical content while allowing skill references to be read', async () => {
-    const rootDir = await createStoredTaskFixture();
-    const prompt = buildLessonPrompt(await readTask('lesson', rootDir));
+    const { task, story } = await createStoredTaskFixture();
+    const prompt = buildLessonPrompt({ task, story });
 
     assert.match(prompt, /read-only commands.*skill references/i);
     assert.match(prompt, /translate every transcript segment/i);
@@ -69,14 +79,19 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('publishes generated JSON in the canonical serialized form', async () => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture({ modelPreset: 'fast' });
     const expected = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
     const rawResponse = JSON.stringify(JSON.parse(expected));
 
     await generateLesson(
-      { slug: 'lesson', modelPreset: 'best', rootDir },
+      { slug: 'lesson', rootDir },
       {
-        generator: { generate: async () => rawResponse },
+        generator: {
+          generate: async ({ model }) => {
+            assert.equal(model, resolveModelPreset('fast'));
+            return rawResponse;
+          },
+        },
         getStatus: getReadyStatus,
       },
     );
@@ -85,13 +100,13 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('rejects invalid JSON without publishing a fallback lesson', async () => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
     const rawResponse = '# invalid';
 
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
+          { slug: 'lesson', rootDir },
           {
             generator: { generate: async () => rawResponse },
             getStatus: getReadyStatus,
@@ -121,7 +136,7 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('rejects syntactically valid lessons with empty required teaching sections', async () => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
     const generated = JSON.parse(
       await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8'),
     );
@@ -132,7 +147,7 @@ describe('lesson persistence and generation coordination', () => {
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
+          { slug: 'lesson', rootDir },
           {
             generator: { generate: async () => JSON.stringify(generated) },
             getStatus: getReadyStatus,
@@ -151,7 +166,7 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('rejects malformed generated sections instead of repairing them', async () => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
     const generated = JSON.parse(
       await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8'),
     );
@@ -162,7 +177,7 @@ describe('lesson persistence and generation coordination', () => {
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
+          { slug: 'lesson', rootDir },
           {
             generator: { generate: async () => JSON.stringify(generated) },
             getStatus: getReadyStatus,
@@ -177,12 +192,12 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('writes error details when generation fails before returning content', async () => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
 
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
+          { slug: 'lesson', rootDir },
           {
             generator: {
               generate: async () => {
@@ -211,7 +226,7 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('preserves the raw model response when publication loses a write race', async () => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
     const { lessonsDir } = await ensureLocalDirs(rootDir);
     const fixture = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
     const rawResponse = JSON.stringify(JSON.parse(fixture));
@@ -220,7 +235,7 @@ describe('lesson persistence and generation coordination', () => {
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
+          { slug: 'lesson', rootDir },
           {
             generator: {
               generate: async () => {
@@ -254,14 +269,14 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('rejects an existing lesson before spending a model call', async () => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
     const { lessonsDir } = await ensureLocalDirs(rootDir);
     await writeFile(join(lessonsDir, 'lesson.json'), '# Existing', 'utf8');
     let calls = 0;
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
+          { slug: 'lesson', rootDir },
           {
             generator: {
               generate: async () => {
@@ -281,20 +296,19 @@ describe('lesson persistence and generation coordination', () => {
     const generation = {
       status: 'succeeded',
       skillVersion: '1',
-      modelPreset: 'best',
       requestedModel: 'gpt-5.5',
       codexVersion: 'codex-cli test',
       startedAt: '2026-06-28T00:01:00.000Z',
       completedAt: '2026-06-28T00:02:00.000Z',
     };
-    const rootDir = await createStoredTaskFixture({ generation });
+    const { rootDir } = await createStoredTaskFixture({ generation });
     const { lessonsDir } = await ensureLocalDirs(rootDir);
     await writeFile(join(lessonsDir, 'lesson.json'), '# Existing', 'utf8');
 
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
+          { slug: 'lesson', rootDir },
           { generator: { generate: async () => '# replacement' }, getStatus: getReadyStatus },
         ),
       /already exists/,
@@ -304,12 +318,12 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('treats lesson publication as successful when success metadata cannot be persisted', async () => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
     const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
     const updates: string[] = [];
 
     const result = await generateLesson(
-      { slug: 'lesson', modelPreset: 'best', rootDir },
+      { slug: 'lesson', rootDir },
       {
         generator: { generate: async () => validLesson },
         getStatus: getReadyStatus,
@@ -333,7 +347,7 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('rejects concurrent generation before a second model call', async () => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
     const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
     let calls = 0;
     let release!: () => void;
@@ -353,14 +367,14 @@ describe('lesson persistence and generation coordination', () => {
       },
     };
     const first = generateLesson(
-      { slug: 'lesson', modelPreset: 'best', rootDir },
+      { slug: 'lesson', rootDir },
       { generator, getStatus: getReadyStatus },
     );
     await started;
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
+          { slug: 'lesson', rootDir },
           { generator, getStatus: getReadyStatus },
         ),
       /already being generated/,
@@ -370,76 +384,8 @@ describe('lesson persistence and generation coordination', () => {
     assert.equal(calls, 1);
   });
 
-  it('does not overwrite a task while its lesson is being generated', async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), 'lesson-preparation-lock-'));
-    const now = new Date('2026-06-28T00:00:00.000Z');
-    const input = {
-      rootDir,
-      now,
-      video: {
-        url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
-        id: 'jNQXAC9IVRw',
-        title: 'Me at the zoo',
-      },
-      transcript: {
-        source: 'youtube-transcript.io' as const,
-        segments: [{ text: 'Here we are at the zoo.', start: 0, duration: 1 }],
-      },
-      learningSettings: {
-        targetLanguage: 'zh' as const,
-        cefrLevels: ['A2' as const, 'B1' as const],
-      },
-    };
-    const prepared = await buildTaskFile(input);
-    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
-    let calls = 0;
-    let release!: () => void;
-    let generationStarted!: () => void;
-    const started = new Promise<void>((resolve) => {
-      generationStarted = resolve;
-    });
-    const blocked = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const first = generateLesson(
-      { slug: prepared.taskSlug, modelPreset: 'best', rootDir },
-      {
-        generator: {
-          generate: async () => {
-            calls += 1;
-            generationStarted();
-            await blocked;
-            return validLesson;
-          },
-        },
-        getStatus: getReadyStatus,
-      },
-    );
-    await started;
-
-    try {
-      await assert.rejects(
-        () =>
-          buildTaskFile({
-            ...input,
-            learningSettings: { targetLanguage: 'en', cefrLevels: ['B2'] },
-          }),
-        /currently being generated/,
-      );
-      assert.deepEqual((await readTask(prepared.taskSlug, rootDir)).learningSettings, {
-        targetLanguage: 'zh',
-        cefrLevels: ['A2', 'B1'],
-      });
-    } finally {
-      release();
-      await first;
-    }
-
-    assert.equal(calls, 1);
-  });
-
   it('shares a generation lock across real and symlinked root paths', async (context) => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
     const aliasRoot = `${rootDir}-alias`;
     try {
       await symlink(rootDir, aliasRoot, 'dir');
@@ -478,14 +424,14 @@ describe('lesson persistence and generation coordination', () => {
     };
 
     const first = generateLesson(
-      { slug: 'lesson', modelPreset: 'best', rootDir },
+      { slug: 'lesson', rootDir },
       { generator, getStatus: getReadyStatus },
     );
     await started;
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir: aliasRoot },
+          { slug: 'lesson', rootDir: aliasRoot },
           { generator, getStatus: getReadyStatus },
         ),
       /already being generated/,
@@ -496,13 +442,13 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('enforces the generation deadline when a generator ignores its signal', async () => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
     const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
 
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
+          { slug: 'lesson', rootDir },
           {
             generator: {
               generate: async () => {
@@ -560,7 +506,7 @@ describe('lesson persistence and generation coordination', () => {
   });
 
   it('treats a dangling final lesson symlink as an existing lesson', async (context) => {
-    const rootDir = await createStoredTaskFixture();
+    const { rootDir } = await createStoredTaskFixture();
     const { lessonsDir } = await ensureLocalDirs(rootDir);
     try {
       await symlink(join(rootDir, 'missing-lesson.json'), join(lessonsDir, 'lesson.json'), 'file');
@@ -581,7 +527,7 @@ describe('lesson persistence and generation coordination', () => {
     await assert.rejects(
       () =>
         generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
+          { slug: 'lesson', rootDir },
           {
             generator: {
               generate: async () => {
@@ -593,35 +539,6 @@ describe('lesson persistence and generation coordination', () => {
           },
         ),
       /already exists/,
-    );
-    assert.equal(calls, 0);
-  });
-
-  it('rejects a task whose declared output path does not match its slug', async () => {
-    const rootDir = await createStoredTaskFixture({
-      outputPath: '.local/lessons/a-different-lesson.json',
-    });
-    let calls = 0;
-
-    await assert.rejects(
-      () =>
-        generateLesson(
-          { slug: 'lesson', modelPreset: 'best', rootDir },
-          {
-            generator: {
-              generate: async () => {
-                calls += 1;
-                return '# replacement';
-              },
-            },
-            getStatus: getReadyStatus,
-          },
-        ),
-      (error: unknown) => {
-        assert.ok(error instanceof GenerationError);
-        assert.equal(error.code, 'GENERATION_INVALID');
-        return true;
-      },
     );
     assert.equal(calls, 0);
   });

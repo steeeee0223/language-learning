@@ -8,6 +8,7 @@ import { GET as getLessons } from '@/app/api/lessons/route.ts';
 import { GET as getLesson } from '@/app/api/lessons/[slug]/route.ts';
 import { createStoriesPostHandler } from '@/app/api/stories/route.ts';
 import { POST as postTask } from '@/app/api/tasks/route.ts';
+import { POST as generateTask } from '@/app/api/tasks/[slug]/generate/route.ts';
 import { lessonSchema } from '@/lib/lesson-content.ts';
 
 async function validLessonJson() {
@@ -322,6 +323,35 @@ test('GET /api/lessons lists JSON lessons and detail returns structured content'
   const detailPayload = await detailResponse.json();
   assert.equal(detailResponse.status, 200);
   assert.deepEqual(detailPayload.lesson.content, lessonSchema.parse(JSON.parse(await validLessonJson())));
+});
+
+test('POST /api/tasks/[slug]/generate accepts only an empty request body', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-api-generate-'));
+  const originalRoot = process.env.LOCAL_DATA_ROOT;
+  process.env.LOCAL_DATA_ROOT = rootDir;
+
+  try {
+    const accepted = await generateTask(
+      new Request('http://localhost/api/tasks/missing/generate', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }),
+      { params: Promise.resolve({ slug: 'missing' }) },
+    );
+    const rejected = await generateTask(
+      new Request('http://localhost/api/tasks/missing/generate', {
+        method: 'POST',
+        body: JSON.stringify({ modelPreset: 'fast' }),
+      }),
+      { params: Promise.resolve({ slug: 'missing' }) },
+    );
+
+    assert.notEqual(accepted.status, 400);
+    assert.equal(rejected.status, 400);
+  } finally {
+    if (originalRoot === undefined) delete process.env.LOCAL_DATA_ROOT;
+    else process.env.LOCAL_DATA_ROOT = originalRoot;
+  }
 });
 
 describe('Codex generation API', () => {

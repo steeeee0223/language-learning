@@ -12,6 +12,7 @@ import {
   orderCefrLevels,
 } from '@/lib/lesson-sections.ts';
 import type { StoredTask } from '@/lib/server/task-schema.ts';
+import type { Story } from '@/lib/server/story-schema.ts';
 
 const text = z.string().catch(() => '');
 const requiredText = z.string().refine((value) => value.trim().length > 0, 'Expected non-empty text');
@@ -223,7 +224,15 @@ export function formatTimestamp(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
-export function parseGeneratedLesson(raw: string, task: StoredTask): LessonContent {
+export type LessonGenerationSource = {
+  task: StoredTask;
+  story: Story;
+};
+
+export function parseGeneratedLesson(
+  raw: string,
+  { task, story }: LessonGenerationSource,
+): LessonContent {
   const cefrLevels = orderCefrLevels(task.learningSettings.cefrLevels);
   let value: unknown;
   try {
@@ -246,7 +255,7 @@ export function parseGeneratedLesson(raw: string, task: StoredTask): LessonConte
   ) {
     throw new Error('Generated lesson does not match the lesson contract: CEFR sections are incomplete.');
   }
-  if (parsed.transcripts.length !== task.transcript.segments.length) {
+  if (parsed.transcripts.length !== story.transcript.segments.length) {
     throw new Error('Generated lesson does not match the lesson contract: transcript count differs.');
   }
 
@@ -264,19 +273,19 @@ export function parseGeneratedLesson(raw: string, task: StoredTask): LessonConte
   return lessonSchema.parse({
     schemaVersion: 1,
     video: {
-      id: task.video.id,
-      title: task.video.title,
+      id: story.video.id,
+      title: story.video.title,
       translatedTitle: parsed.video.translatedTitle.trim()
         ? parsed.video.translatedTitle
-        : task.video.title,
+        : story.video.title,
     },
     lesson: {
       targetLanguage: task.learningSettings.targetLanguage,
       cefrLevels,
-      transcriptSource: task.transcript.source,
+      transcriptSource: story.transcript.source,
       focus: parsed.lesson.focus.trim() ? parsed.lesson.focus : '',
     },
-    transcripts: task.transcript.segments.map((segment, index) => {
+    transcripts: story.transcript.segments.map((segment, index) => {
       const translation = parsed.transcripts[index]?.translation;
 
       return {
