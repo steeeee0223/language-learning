@@ -65,6 +65,11 @@ type LegacyCandidate = {
   source: string;
 };
 
+type CandidateReadResult =
+  | { malformed: true }
+  | { current: true }
+  | { candidate: LegacyCandidate };
+
 function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error && error.code === code;
 }
@@ -260,7 +265,7 @@ async function migrateCandidate(
   return undefined;
 }
 
-async function readCandidate(slug: string, tasksDir: string) {
+async function readCandidate(slug: string, tasksDir: string): Promise<CandidateReadResult> {
   const source = await readRegularFile(join(tasksDir, `${slug}.json`));
   let value: unknown;
   try {

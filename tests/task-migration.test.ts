@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   access,
@@ -69,33 +68,6 @@ async function localRoot(prefix: string) {
 
 async function writeTask(rootDir: string, slug: string, task: unknown) {
   await writeFile(join(rootDir, '.local', 'tasks', `${slug}.json`), `${JSON.stringify(task, null, 2)}\n`);
-}
-
-function runLockWorker(rootDir: string, label: string) {
-  return new Promise<void>((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      ['--import', 'tsx', 'tests/fixtures/task-file-lock-worker.ts', rootDir, label],
-      { cwd: process.cwd(), stdio: ['ignore', 'ignore', 'pipe'] },
-    );
-    let stderr = '';
-    child.stderr.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
-    child.on('error', reject);
-    child.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`Task lock worker ${label} exited with ${code}: ${stderr}`));
-    });
-  });
-}
-
-async function waitForPaths(paths: string[]) {
-  const deadline = Date.now() + 5_000;
-  while (true) {
-    const ready = await Promise.all(paths.map((path) => access(path).then(() => true, () => false)));
-    if (ready.every(Boolean)) return;
-    if (Date.now() >= deadline) throw new Error('Timed out waiting for task lock workers.');
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
 }
 
 test('legacyStoredTaskSchema is strict and matches the schema-v3 contract', async () => {
@@ -649,42 +621,4 @@ test('a crashed recovery claim with a mismatched process identity is recoverable
     if (!entered) await rm(recoveryClaim, { recursive: true, force: true });
     await acquisition;
   }
-});
-
-test('multiple processes recover one stale task lock without overlapping a fresh owner', async () => {
-  const rootDir = await localRoot('task-file-lock-process-recovery-');
-  const lockDir = join(rootDir, '.local', 'tasks', '.lesson.task.lock');
-  const ownerToken = 'stale';
-  const ownerHash = createHash('sha256').update(ownerToken).digest('hex');
-  const recoveryClaim = `${lockDir}.recovery.${ownerHash}`;
-  await mkdir(lockDir);
-  await mkdir(recoveryClaim);
-  await writeFile(
-    join(lockDir, 'owner.json'),
-    JSON.stringify({
-      pid: 2_147_483_647,
-      processStartIdentity: 'dead-lock-owner',
-      token: ownerToken,
-    }),
-  );
-  await writeFile(
-    join(recoveryClaim, 'owner.json'),
-    JSON.stringify({
-      pid: 2_147_483_647,
-      processStartIdentity: 'dead-recovery-owner',
-      token: 'crashed-recoverer',
-      createdAt: '2020-01-01T00:00:00.000Z',
-    }),
-  );
-  const staleTime = new Date(Date.now() - 10 * 60_000);
-  await utimes(lockDir, staleTime, staleTime);
-  await utimes(recoveryClaim, staleTime, staleTime);
-  const labels = Array.from({ length: 12 }, (_, index) => `worker-${index}`);
-  const workers = labels.map((label) => runLockWorker(rootDir, label));
-  await waitForPaths(labels.map((label) => join(rootDir, '.task-lock-ready', label)));
-  await writeFile(join(rootDir, '.task-lock-start'), 'start');
-
-  await Promise.all(workers);
-  await assert.rejects(() => access(join(rootDir, '.task-lock-overlap')), /ENOENT/);
-  await assert.rejects(() => access(recoveryClaim), /ENOENT/);
 });

@@ -41,9 +41,13 @@ async function readOwner(lockPath: string): Promise<LockOwner | undefined> {
       typeof value.token === 'string' &&
       (!('processStartIdentity' in value) || typeof value.processStartIdentity === 'string')
     ) {
+      const processStartIdentity =
+        'processStartIdentity' in value && typeof value.processStartIdentity === 'string'
+          ? value.processStartIdentity
+          : undefined;
       return {
         pid: value.pid,
-        processStartIdentity: value.processStartIdentity,
+        processStartIdentity,
         token: value.token,
       };
     }

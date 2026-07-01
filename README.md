@@ -30,10 +30,13 @@ Local-first Next.js + Fumadocs app for turning short YouTube videos into structu
    pnpm dev
    ```
 
-4. Open **Get Started**, paste a YouTube URL, and fetch the transcript.
-5. Choose the target language and CEFR levels, then select **Prepare Lesson**.
-6. Choose **Auto**, **Fast**, or **Best quality**, then select **Generate Lesson**.
-7. Review the generated lesson in the app, print it to PDF, or export it to Notion when configured.
+4. Open **Get Started** and add a YouTube URL. The app fetches its transcript once and
+   reuses the stored story when that video is selected again.
+5. Choose the target language, CEFR levels, and model preset, then select
+   **Generate lesson**. This creates one task and generates its lesson.
+6. Use **Tasks** to view tasks grouped by story, open successful lessons, regenerate as a
+   new task, or delete a task and its outcome.
+7. Review a generated lesson in the app, print it to PDF, or export it to Notion when configured.
 
 With the recommended ChatGPT sign-in, each OS user uses their own Codex account and usage allowance, with no API key required. The project does not ship or configure a shared `OPENAI_API_KEY`, Vercel AI Gateway key, or other shared AI key. Generation uses whatever local Codex authentication belongs to the OS account running the app.
 
@@ -64,12 +67,20 @@ Generated local artifacts are intentionally gitignored:
 
 ```txt
 .local/
-  tasks/
-  lessons/
-  errors/
+  stories/<video-id>.json
+  tasks/<task-id>.json
+  lessons/<task-id>.json
+  errors/<task-id>/...
 ```
 
-`.local/tasks` contains local task JSON, and `.local/lessons` contains generated lesson JSON. A failed generation with no returned content is written to `.local/errors/<task-id>.json`. When a failure occurs after Codex returns content, such as a publication failure, the attempt is written to `.local/errors/<task-id>/<attempt>/` with `error.json` and `generated.json`. Codex credentials are not stored under `.local`.
+`.local/stories` stores reusable video metadata and transcripts. `.local/tasks` stores
+immutable generation settings and references a story by video ID; source material is not
+duplicated into each task. `.local/lessons` stores successful outcomes. A failed
+generation with no returned content is written to `.local/errors/<task-id>.json`. When a
+failure occurs after Codex returns content, the attempt is written to
+`.local/errors/<task-id>/<attempt>/` with `error.json` and `generated.json`. Regeneration
+creates a new task and preserves the source task. Codex credentials are not stored under
+`.local`.
 
 For tests or isolated local runs, set `LOCAL_DATA_ROOT` to another directory.
 
@@ -79,7 +90,7 @@ For tests or isolated local runs, set `LOCAL_DATA_ROOT` to another directory.
 pnpm dev
 pnpm test
 pnpm lint
-pnpm types:check
+pnpm typecheck
 pnpm build
 ```
 
