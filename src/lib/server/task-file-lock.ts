@@ -1,22 +1,35 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { localSlugSchema } from '@/lib/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
+import { resolveProcessStartIdentity as resolveLocalProcessStartIdentity } from './process-start-identity';
 
 const TASK_FILE_LOCK_POLL_MS = 10;
 const TASK_FILE_LOCK_STALE_MS = 5 * 60_000;
 
+type LockOwner = {
+  pid: number;
+  processStartIdentity?: string;
+  token: string;
+};
+
+export type ProcessStartIdentityResolver = (pid: number) => Promise<string | null>;
+
 function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error && error.code === code;
+}
+
+function isPathOccupiedError(error: unknown) {
+  return hasErrorCode(error, 'EEXIST') || hasErrorCode(error, 'ENOTEMPTY');
 }
 
 function delay(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function readOwner(lockPath: string) {
+async function readOwner(lockPath: string): Promise<LockOwner | undefined> {
   try {
     const value: unknown = JSON.parse(await readFile(join(lockPath, 'owner.json'), 'utf8'));
     if (
@@ -25,9 +38,14 @@ async function readOwner(lockPath: string) {
       'pid' in value &&
       typeof value.pid === 'number' &&
       'token' in value &&
-      typeof value.token === 'string'
+      typeof value.token === 'string' &&
+      (!('processStartIdentity' in value) || typeof value.processStartIdentity === 'string')
     ) {
-      return { pid: value.pid, token: value.token };
+      return {
+        pid: value.pid,
+        processStartIdentity: value.processStartIdentity,
+        token: value.token,
+      };
     }
   } catch (error) {
     if (!hasErrorCode(error, 'ENOENT') && !(error instanceof SyntaxError)) throw error;
@@ -35,60 +53,129 @@ async function readOwner(lockPath: string) {
   return undefined;
 }
 
+function hasSameOwner(left: LockOwner | undefined, right: LockOwner | undefined) {
+  return (
+    left?.pid === right?.pid &&
+    left?.processStartIdentity === right?.processStartIdentity &&
+    left?.token === right?.token
+  );
+}
+
+async function isOwnerRecoverable(
+  owner: LockOwner | undefined,
+  resolveProcessStartIdentity: ProcessStartIdentityResolver,
+) {
+  if (!owner) return false;
+  let currentIdentity: string | null;
+  try {
+    currentIdentity = await resolveProcessStartIdentity(owner.pid);
+  } catch {
+    return false;
+  }
+  if (currentIdentity === null) return true;
+  return owner.processStartIdentity !== undefined && owner.processStartIdentity !== currentIdentity;
+}
+
 function recoveryClaimPath(lockPath: string, ownerIdentity: string) {
   const ownerHash = createHash('sha256').update(ownerIdentity).digest('hex');
   return `${lockPath}.recovery.${ownerHash}`;
 }
 
-async function acquireRecoveryClaim(claimPath: string, staleAfterMs: number) {
-  const token = randomUUID();
-  while (true) {
+async function publishOwnedDirectory(path: string, owner: LockOwner) {
+  const preparedPath = `${path}.pending.${owner.token}`;
+  await mkdir(preparedPath);
+  try {
+    await writeFile(join(preparedPath, 'owner.json'), JSON.stringify(owner), {
+      encoding: 'utf8',
+      flag: 'wx',
+    });
     try {
-      await mkdir(claimPath);
+      await rename(preparedPath, path);
+      return true;
     } catch (error) {
-      if (!hasErrorCode(error, 'EEXIST')) throw error;
-      let claimStats;
-      try {
-        claimStats = await stat(claimPath);
-      } catch (statError) {
-        if (hasErrorCode(statError, 'ENOENT')) continue;
-        throw statError;
-      }
-      if (Date.now() - claimStats.mtimeMs <= staleAfterMs) return undefined;
-
-      const abandonedClaim = `${claimPath}.abandoned.${randomUUID()}`;
-      try {
-        await rename(claimPath, abandonedClaim);
-      } catch (renameError) {
-        if (hasErrorCode(renameError, 'ENOENT')) continue;
-        throw renameError;
-      }
-      await rm(abandonedClaim, { recursive: true, force: true });
-      continue;
-    }
-
-    try {
-      await writeFile(
-        join(claimPath, 'owner.json'),
-        JSON.stringify({ pid: process.pid, token, createdAt: new Date().toISOString() }),
-        { encoding: 'utf8', flag: 'wx' },
-      );
-    } catch (error) {
-      await rm(claimPath, { recursive: true, force: true });
+      if (isPathOccupiedError(error)) return false;
       throw error;
     }
-
-    return {
-      token,
-      release: async () => {
-        const owner = await readOwner(claimPath);
-        if (owner?.token === token) await rm(claimPath, { recursive: true, force: true });
-      },
-    };
+  } finally {
+    await rm(preparedPath, { recursive: true, force: true });
   }
 }
 
-async function recoverStaleLock(lockPath: string, staleAfterMs: number) {
+async function removeRecoverableOwnedDirectory(
+  path: string,
+  staleAfterMs: number,
+  resolveProcessStartIdentity: ProcessStartIdentityResolver,
+) {
+  let initialStats;
+  try {
+    initialStats = await stat(path);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) return true;
+    throw error;
+  }
+  if (Date.now() - initialStats.mtimeMs <= staleAfterMs) return false;
+  const initialOwner = await readOwner(path);
+  if (!(await isOwnerRecoverable(initialOwner, resolveProcessStartIdentity))) return false;
+
+  let currentStats;
+  try {
+    currentStats = await stat(path);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) return true;
+    throw error;
+  }
+  const currentOwner = await readOwner(path);
+  if (
+    currentStats.dev !== initialStats.dev ||
+    currentStats.ino !== initialStats.ino ||
+    !hasSameOwner(currentOwner, initialOwner)
+  ) {
+    return false;
+  }
+
+  const abandonedPath = `${path}.abandoned.${randomUUID()}`;
+  try {
+    await rename(path, abandonedPath);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) return true;
+    throw error;
+  }
+  await rm(abandonedPath, { recursive: true, force: true });
+  return true;
+}
+
+async function acquireRecoveryClaim(
+  claimPath: string,
+  staleAfterMs: number,
+  owner: LockOwner,
+  resolveProcessStartIdentity: ProcessStartIdentityResolver,
+) {
+  while (!(await publishOwnedDirectory(claimPath, owner))) {
+    const recovered = await removeRecoverableOwnedDirectory(
+      claimPath,
+      staleAfterMs,
+      resolveProcessStartIdentity,
+    );
+    if (!recovered) return undefined;
+  }
+
+  return {
+    owner,
+    release: async () => {
+      const currentOwner = await readOwner(claimPath);
+      if (hasSameOwner(currentOwner, owner)) {
+        await rm(claimPath, { recursive: true, force: true });
+      }
+    },
+  };
+}
+
+async function recoverStaleLock(
+  lockPath: string,
+  staleAfterMs: number,
+  processOwner: Omit<LockOwner, 'token'>,
+  resolveProcessStartIdentity: ProcessStartIdentityResolver,
+) {
   let initialStats;
   try {
     initialStats = await stat(lockPath);
@@ -98,9 +185,17 @@ async function recoverStaleLock(lockPath: string, staleAfterMs: number) {
   }
   if (Date.now() - initialStats.mtimeMs <= staleAfterMs) return;
   const initialOwner = await readOwner(lockPath);
+  if (!(await isOwnerRecoverable(initialOwner, resolveProcessStartIdentity))) return;
+
   const ownerIdentity = initialOwner?.token ?? `missing:${initialStats.dev}:${initialStats.ino}`;
   const recoveryPath = recoveryClaimPath(lockPath, ownerIdentity);
-  const claim = await acquireRecoveryClaim(recoveryPath, staleAfterMs);
+  const claimOwner = { ...processOwner, token: randomUUID() };
+  const claim = await acquireRecoveryClaim(
+    recoveryPath,
+    staleAfterMs,
+    claimOwner,
+    resolveProcessStartIdentity,
+  );
   if (!claim) return;
 
   try {
@@ -108,11 +203,10 @@ async function recoverStaleLock(lockPath: string, staleAfterMs: number) {
     const currentOwner = await readOwner(lockPath);
     const currentClaim = await readOwner(recoveryPath);
     if (
-      currentClaim?.token !== claim.token ||
+      !hasSameOwner(currentClaim, claim.owner) ||
       currentStats.dev !== initialStats.dev ||
       currentStats.ino !== initialStats.ino ||
-      Date.now() - currentStats.mtimeMs <= staleAfterMs ||
-      currentOwner?.token !== initialOwner?.token
+      !hasSameOwner(currentOwner, initialOwner)
     ) {
       return;
     }
@@ -130,69 +224,42 @@ async function recoverStaleLock(lockPath: string, staleAfterMs: number) {
 export type TaskFileLockOptions = {
   staleAfterMs?: number;
   pollMs?: number;
+  resolveProcessStartIdentity?: ProcessStartIdentityResolver;
 };
 
 async function acquireTaskFileLock(
   rootDir: string,
   slug: string,
-  { staleAfterMs = TASK_FILE_LOCK_STALE_MS, pollMs = TASK_FILE_LOCK_POLL_MS }: TaskFileLockOptions,
+  {
+    staleAfterMs = TASK_FILE_LOCK_STALE_MS,
+    pollMs = TASK_FILE_LOCK_POLL_MS,
+    resolveProcessStartIdentity = resolveLocalProcessStartIdentity,
+  }: TaskFileLockOptions,
 ) {
   localSlugSchema.parse(slug);
   const { tasksDir } = await ensureLocalDirs(rootDir);
   const lockPath = join(tasksDir, `.${slug}.task.lock`);
-  const token = randomUUID();
+  const processStartIdentity = await resolveProcessStartIdentity(process.pid);
+  if (processStartIdentity === null) {
+    throw new Error('The current process disappeared while acquiring a task file lock.');
+  }
+  const processOwner = { pid: process.pid, processStartIdentity };
 
   while (true) {
-    try {
-      await mkdir(lockPath);
-    } catch (error) {
-      if (!hasErrorCode(error, 'EEXIST')) throw error;
-      await recoverStaleLock(lockPath, staleAfterMs);
-      await delay(pollMs);
-      continue;
+    const owner = { ...processOwner, token: randomUUID() };
+    if (await publishOwnedDirectory(lockPath, owner)) {
+      const release = async () => {
+        const currentOwner = await readOwner(lockPath);
+        if (hasSameOwner(currentOwner, owner)) {
+          await rm(lockPath, { recursive: true, force: true });
+        }
+      };
+      return { release };
     }
 
-    try {
-      await writeFile(join(lockPath, 'owner.json'), JSON.stringify({ pid: process.pid, token }), {
-        encoding: 'utf8',
-        flag: 'wx',
-      });
-    } catch (error) {
-      await rm(lockPath, { recursive: true, force: true });
-      throw error;
-    }
-
-    const release = async () => {
-      const owner = await readOwner(lockPath);
-      if (owner?.token === token) await rm(lockPath, { recursive: true, force: true });
-    };
-    return { lockPath, token, release };
+    await recoverStaleLock(lockPath, staleAfterMs, processOwner, resolveProcessStartIdentity);
+    await delay(pollMs);
   }
-}
-
-function startLeaseHeartbeat(lockPath: string, token: string, staleAfterMs: number) {
-  const intervalMs = Math.max(1, Math.floor(staleAfterMs / 3));
-  let pending = Promise.resolve();
-  let failure: unknown;
-  const timer = setInterval(() => {
-    pending = pending.then(async () => {
-      if (failure) return;
-      try {
-        const owner = await readOwner(lockPath);
-        if (owner?.token !== token) return;
-        const now = new Date();
-        await utimes(lockPath, now, now);
-      } catch (error) {
-        if (!hasErrorCode(error, 'ENOENT')) failure = error;
-      }
-    });
-  }, intervalMs);
-
-  return async () => {
-    clearInterval(timer);
-    await pending;
-    if (failure) throw failure;
-  };
 }
 
 export async function withTaskFileLock<T>(
@@ -201,16 +268,10 @@ export async function withTaskFileLock<T>(
   operation: () => Promise<T>,
   options: TaskFileLockOptions = {},
 ) {
-  const staleAfterMs = options.staleAfterMs ?? TASK_FILE_LOCK_STALE_MS;
-  const { lockPath, token, release } = await acquireTaskFileLock(rootDir, slug, options);
-  const stopHeartbeat = startLeaseHeartbeat(lockPath, token, staleAfterMs);
+  const { release } = await acquireTaskFileLock(rootDir, slug, options);
   try {
     return await operation();
   } finally {
-    try {
-      await stopHeartbeat();
-    } finally {
-      await release();
-    }
+    await release();
   }
 }
