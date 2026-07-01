@@ -1,5 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -57,6 +68,33 @@ async function localRoot(prefix: string) {
 
 async function writeTask(rootDir: string, slug: string, task: unknown) {
   await writeFile(join(rootDir, '.local', 'tasks', `${slug}.json`), `${JSON.stringify(task, null, 2)}\n`);
+}
+
+function runLockWorker(rootDir: string, label: string) {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ['--import', 'tsx', 'tests/fixtures/task-file-lock-worker.ts', rootDir, label],
+      { cwd: process.cwd(), stdio: ['ignore', 'ignore', 'pipe'] },
+    );
+    let stderr = '';
+    child.stderr.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Task lock worker ${label} exited with ${code}: ${stderr}`));
+    });
+  });
+}
+
+async function waitForPaths(paths: string[]) {
+  const deadline = Date.now() + 5_000;
+  while (true) {
+    const ready = await Promise.all(paths.map((path) => access(path).then(() => true, () => false)));
+    if (ready.every(Boolean)) return;
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for task lock workers.');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 test('legacyStoredTaskSchema is strict and matches the schema-v3 contract', async () => {
@@ -154,6 +192,7 @@ test('retries safely when migration fails after linking the nested diagnostic', 
   const { migrateLegacyTask } = await import('@/lib/server/task-migration.ts');
   const rootDir = await localRoot('task-migration-error-post-link-failure-');
   const flatPath = join(rootDir, '.local', 'errors', 'lesson.json');
+  const stagingPath = join(rootDir, '.local', 'errors', '.migration-lesson', 'error.json');
   const nestedPath = join(rootDir, '.local', 'errors', 'lesson', 'legacy', 'error.json');
   const taskPath = join(rootDir, '.local', 'tasks', 'lesson.json');
   await writeTask(rootDir, 'lesson', legacyTask('lesson'));
@@ -170,14 +209,83 @@ test('retries safely when migration fails after linking the nested diagnostic', 
       conflicts: [{ id: 'lesson', reason: 'error-diagnostic-conflict' }],
     },
   );
-  assert.equal(await readFile(flatPath, 'utf8'), '{"legacy":true}\n');
+  await assert.rejects(() => readFile(flatPath, 'utf8'), /ENOENT/);
+  assert.equal(await readFile(stagingPath, 'utf8'), '{"legacy":true}\n');
   assert.equal(await readFile(nestedPath, 'utf8'), '{"legacy":true}\n');
   assert.equal(JSON.parse(await readFile(taskPath, 'utf8')).schemaVersion, 3);
 
   assert.deepEqual(await migrateLegacyTask('lesson', rootDir), { migrated: 1, conflicts: [] });
   await assert.rejects(() => readFile(flatPath, 'utf8'), /ENOENT/);
+  await assert.rejects(() => readFile(stagingPath, 'utf8'), /ENOENT/);
+  await assert.rejects(
+    () => access(join(rootDir, '.local', 'errors', '.migration-lesson')),
+    /ENOENT/,
+  );
   assert.equal(await readFile(nestedPath, 'utf8'), '{"legacy":true}\n');
   assert.equal(JSON.parse(await readFile(taskPath, 'utf8')).schemaVersion, 4);
+});
+
+test('resumes a deterministic diagnostic staging file after a crash', async () => {
+  const { migrateLegacyTask } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-error-staging-retry-');
+  const stagingPath = join(rootDir, '.local', 'errors', '.migration-lesson', 'error.json');
+  await writeTask(rootDir, 'lesson', legacyTask('lesson'));
+  await mkdir(join(rootDir, '.local', 'errors', '.migration-lesson'));
+  await writeFile(stagingPath, '{"staged":true}\n');
+
+  assert.deepEqual(await migrateLegacyTask('lesson', rootDir), { migrated: 1, conflicts: [] });
+  assert.equal(
+    await readFile(join(rootDir, '.local', 'errors', 'lesson', 'legacy', 'error.json'), 'utf8'),
+    '{"staged":true}\n',
+  );
+  await assert.rejects(() => readFile(stagingPath, 'utf8'), /ENOENT/);
+  await assert.rejects(
+    () => access(join(rootDir, '.local', 'errors', '.migration-lesson')),
+    /ENOENT/,
+  );
+});
+
+test('leaves a replacement flat diagnostic untouched while staging is pending', async () => {
+  const { migrateLegacyTask } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-error-staging-replacement-');
+  const flatPath = join(rootDir, '.local', 'errors', 'lesson.json');
+  const stagingPath = join(rootDir, '.local', 'errors', '.migration-lesson', 'error.json');
+  await writeTask(rootDir, 'lesson', legacyTask('lesson'));
+  await mkdir(join(rootDir, '.local', 'errors', '.migration-lesson'));
+  await writeFile(stagingPath, '{"staged":true}\n');
+  await writeFile(flatPath, '{"replacement":true}\n');
+
+  assert.deepEqual(await migrateLegacyTask('lesson', rootDir), {
+    migrated: 0,
+    conflicts: [{ id: 'lesson', reason: 'error-diagnostic-conflict' }],
+  });
+  assert.equal(await readFile(stagingPath, 'utf8'), '{"staged":true}\n');
+  assert.equal(await readFile(flatPath, 'utf8'), '{"replacement":true}\n');
+  assert.equal(
+    JSON.parse(await readFile(join(rootDir, '.local', 'tasks', 'lesson.json'), 'utf8')).schemaVersion,
+    3,
+  );
+});
+
+test('preserves a replacement flat diagnostic created after staging', async () => {
+  const { migrateLegacyTask } = await import('@/lib/server/task-migration.ts');
+  const rootDir = await localRoot('task-migration-error-post-staging-replacement-');
+  const flatPath = join(rootDir, '.local', 'errors', 'lesson.json');
+  const stagingPath = join(rootDir, '.local', 'errors', '.migration-lesson', 'error.json');
+  await writeTask(rootDir, 'lesson', legacyTask('lesson'));
+  await writeFile(flatPath, '{"legacy":true}\n');
+
+  assert.deepEqual(
+    await migrateLegacyTask('lesson', rootDir, {
+      afterDiagnosticStaging: () => writeFile(flatPath, '{"replacement":true}\n'),
+    }),
+    {
+      migrated: 0,
+      conflicts: [{ id: 'lesson', reason: 'error-diagnostic-conflict' }],
+    },
+  );
+  assert.equal(await readFile(stagingPath, 'utf8'), '{"legacy":true}\n');
+  assert.equal(await readFile(flatPath, 'utf8'), '{"replacement":true}\n');
 });
 
 test('serializes concurrent migration of the same flat diagnostic', async () => {
@@ -213,7 +321,14 @@ test('keeps a differing flat diagnostic when the nested legacy target already ex
     migrated: 0,
     conflicts: [{ id: 'lesson', reason: 'error-diagnostic-conflict' }],
   });
-  assert.equal(await readFile(join(rootDir, '.local', 'errors', 'lesson.json'), 'utf8'), '{"flat":true}\n');
+  await assert.rejects(
+    () => readFile(join(rootDir, '.local', 'errors', 'lesson.json'), 'utf8'),
+    /ENOENT/,
+  );
+  assert.equal(
+    await readFile(join(rootDir, '.local', 'errors', '.migration-lesson', 'error.json'), 'utf8'),
+    '{"flat":true}\n',
+  );
   assert.equal(
     await readFile(join(rootDir, '.local', 'errors', 'lesson', 'legacy', 'error.json'), 'utf8'),
     '{"nested":true}\n',
@@ -374,4 +489,25 @@ test('migration and generation update wait on the same filesystem task lock', as
   const finalTask = await readTask('lesson', rootDir);
   assert.equal(finalTask.generation.status, 'succeeded');
   assert.equal(finalTask.generation.completedAt, '2026-06-22T08:00:00.000Z');
+});
+
+test('multiple processes recover one stale task lock without overlapping a fresh owner', async () => {
+  const rootDir = await localRoot('task-file-lock-process-recovery-');
+  const lockDir = join(rootDir, '.local', 'tasks', '.lesson.task.lock');
+  const recoveryClaim = `${lockDir}.recovery`;
+  await mkdir(lockDir);
+  await mkdir(recoveryClaim);
+  await writeFile(join(lockDir, 'owner.json'), JSON.stringify({ pid: 2_147_483_647, token: 'stale' }));
+  const staleTime = new Date(Date.now() - 10 * 60_000);
+  await utimes(lockDir, staleTime, staleTime);
+  const labels = Array.from({ length: 12 }, (_, index) => `worker-${index}`);
+  const workers = labels.map((label) => runLockWorker(rootDir, label));
+  await waitForPaths(labels.map((label) => join(rootDir, '.task-lock-ready', label)));
+  await writeFile(join(rootDir, '.task-lock-start'), 'start');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await assert.rejects(() => access(join(rootDir, '.task-lock-entered')), /ENOENT/);
+  await rm(recoveryClaim, { recursive: true });
+
+  await Promise.all(workers);
+  await assert.rejects(() => access(join(rootDir, '.task-lock-overlap')), /ENOENT/);
 });

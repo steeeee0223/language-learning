@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { localSlugSchema } from '@/lib/generation-contracts';
@@ -45,23 +45,47 @@ async function readOwner(lockPath: string) {
 }
 
 async function recoverStaleLock(lockPath: string, staleAfterMs: number) {
-  let lockStats;
+  let initialStats;
   try {
-    lockStats = await stat(lockPath);
+    initialStats = await stat(lockPath);
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT')) return;
     throw error;
   }
-  if (Date.now() - lockStats.mtimeMs <= staleAfterMs) return;
-  const owner = await readOwner(lockPath);
-  if (owner && isProcessAlive(owner.pid)) return;
+  if (Date.now() - initialStats.mtimeMs <= staleAfterMs) return;
+  const initialOwner = await readOwner(lockPath);
+  if (initialOwner && isProcessAlive(initialOwner.pid)) return;
 
-  const abandonedPath = `${lockPath}.abandoned.${randomUUID()}`;
+  const recoveryPath = `${lockPath}.recovery`;
   try {
+    await mkdir(recoveryPath);
+  } catch (error) {
+    if (hasErrorCode(error, 'EEXIST')) return;
+    throw error;
+  }
+
+  try {
+    const currentStats = await stat(lockPath);
+    const currentOwner = await readOwner(lockPath);
+    if (
+      currentStats.dev !== initialStats.dev ||
+      currentStats.ino !== initialStats.ino ||
+      Date.now() - currentStats.mtimeMs <= staleAfterMs ||
+      currentOwner?.token !== initialOwner?.token ||
+      (currentOwner && isProcessAlive(currentOwner.pid))
+    ) {
+      return;
+    }
+
+    const abandonedPath = `${lockPath}.abandoned.${randomUUID()}`;
     await rename(lockPath, abandonedPath);
     await rm(abandonedPath, { recursive: true, force: true });
   } catch (error) {
     if (!hasErrorCode(error, 'ENOENT')) throw error;
+  } finally {
+    await rmdir(recoveryPath).catch((error: unknown) => {
+      if (!hasErrorCode(error, 'ENOENT')) throw error;
+    });
   }
 }
 

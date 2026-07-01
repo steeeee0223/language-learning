@@ -7,6 +7,7 @@ import {
   open,
   readdir,
   rename,
+  rmdir,
   unlink,
   writeFile,
   type FileHandle,
@@ -43,6 +44,7 @@ export type TaskMigrationResult = {
 };
 
 export type TaskMigrationDependencies = {
+  afterDiagnosticStaging?: () => void | Promise<void>;
   afterDiagnosticLink?: () => void | Promise<void>;
 };
 
@@ -91,35 +93,69 @@ async function ensureRealDirectory(path: string) {
   }
 }
 
+async function pathExists(path: string) {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) return false;
+    throw error;
+  }
+}
+
 async function normalizeLegacyError(
   slug: string,
   errorsDir: string,
   dependencies: TaskMigrationDependencies,
 ) {
   const flatPath = join(errorsDir, `${slug}.json`);
-  let source: Awaited<ReturnType<typeof readRegularFileIdentity>>;
-  try {
-    source = await readRegularFileIdentity(flatPath);
-  } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return true;
-    return false;
-  }
-
+  const stagingDir = join(errorsDir, `.migration-${slug}`);
+  const stagingPath = join(stagingDir, 'error.json');
+  const legacyDir = join(errorsDir, slug, 'legacy');
+  const targetPath = join(legacyDir, 'error.json');
   try {
     const taskErrorDir = join(errorsDir, slug);
-    const legacyDir = join(taskErrorDir, 'legacy');
     await ensureRealDirectory(taskErrorDir);
     await ensureRealDirectory(legacyDir);
+    await ensureRealDirectory(stagingDir);
   } catch {
     return false;
   }
 
-  const legacyDir = join(errorsDir, slug, 'legacy');
-  const targetPath = join(legacyDir, 'error.json');
-  let linked = false;
+  let staged: Awaited<ReturnType<typeof readRegularFileIdentity>>;
   try {
     try {
-      await link(flatPath, targetPath);
+      staged = await readRegularFileIdentity(stagingPath);
+      if (await pathExists(flatPath)) return false;
+    } catch (error) {
+      if (!hasErrorCode(error, 'ENOENT')) return false;
+      let source: Awaited<ReturnType<typeof readRegularFileIdentity>>;
+      try {
+        source = await readRegularFileIdentity(flatPath);
+      } catch (flatError) {
+        if (hasErrorCode(flatError, 'ENOENT')) {
+          await rmdir(stagingDir).catch((error: unknown) => {
+            if (!hasErrorCode(error, 'ENOENT') && !hasErrorCode(error, 'ENOTEMPTY')) throw error;
+          });
+          return true;
+        }
+        return false;
+      }
+      await rename(flatPath, stagingPath);
+      staged = await readRegularFileIdentity(stagingPath);
+      if (
+        staged.dev !== source.dev ||
+        staged.ino !== source.ino ||
+        staged.content !== source.content
+      ) {
+        return false;
+      }
+      await dependencies.afterDiagnosticStaging?.();
+    }
+
+    let linked = false;
+    try {
+      await link(stagingPath, targetPath);
       linked = true;
     } catch (error) {
       if (!hasErrorCode(error, 'EEXIST')) throw error;
@@ -127,20 +163,20 @@ async function normalizeLegacyError(
 
     if (linked) await dependencies.afterDiagnosticLink?.();
 
-    const currentFlat = await readRegularFileIdentity(flatPath);
+    if (await pathExists(flatPath)) return false;
+    const currentStaging = await readRegularFileIdentity(stagingPath);
     const currentTarget = await readRegularFileIdentity(targetPath);
     if (
-      currentFlat.dev !== source.dev ||
-      currentFlat.ino !== source.ino ||
-      currentFlat.content !== source.content ||
-      currentTarget.dev !== currentFlat.dev ||
-      currentTarget.ino !== currentFlat.ino ||
-      currentTarget.content !== currentFlat.content
+      currentStaging.dev !== staged.dev ||
+      currentStaging.ino !== staged.ino ||
+      currentStaging.content !== staged.content ||
+      currentTarget.content !== currentStaging.content
     ) {
       return false;
     }
 
-    await unlink(flatPath);
+    await unlink(stagingPath);
+    await rmdir(stagingDir);
     return true;
   } catch {
     return false;
