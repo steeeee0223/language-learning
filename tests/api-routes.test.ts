@@ -6,7 +6,7 @@ import test, { describe, it } from 'node:test';
 
 import { GET as getLessons } from '@/app/api/lessons/route.ts';
 import { GET as getLesson } from '@/app/api/lessons/[slug]/route.ts';
-import { createStoriesPostHandler } from '@/app/api/stories/route.ts';
+import { createStoriesPostHandler } from '@/lib/server/story-route.ts';
 import { POST as postTask } from '@/app/api/tasks/route.ts';
 import { POST as generateTask } from '@/app/api/tasks/[slug]/generate/route.ts';
 import { lessonSchema } from '@/lib/lesson-content.ts';

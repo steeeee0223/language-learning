@@ -5,6 +5,8 @@ import { TasksClient } from '@/components/tasks-client.tsx';
 import { listLessons } from '@/lib/server/lessons.ts';
 import { listTaskGroups } from '@/lib/server/task-queries.ts';
 
+export const dynamic = 'force-dynamic';
+
 export default async function TasksPage() {
   const [lessons, tasks] = await Promise.all([listLessons(), listTaskGroups()]);
 
