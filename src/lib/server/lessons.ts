@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open, readFile, readdir, realpath, type FileHandle } from 'node:fs/promises';
+import { open, readdir, realpath, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { lessonSchema, type LessonContent } from '@/lib/lesson-content';
