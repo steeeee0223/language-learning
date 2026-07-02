@@ -7,7 +7,6 @@ import { localSlugSchema } from '@/lib/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
 import { hasNodeErrorCode } from './node-utils';
 import { isPathWithin } from './path-utils';
-import { TaskMigrationError } from './task-migration';
 import { readTask } from './task-store';
 
 const LESSON_EXTENSION = '.json';
@@ -60,13 +59,7 @@ async function readGeneratedAt(rootDir: string, slug: string, fallback: string) 
   try {
     return (await readTask(slug, rootDir)).createdAt;
   } catch (error) {
-    if (
-      !hasNodeErrorCode(error, 'ENOENT') &&
-      !(error instanceof SyntaxError) &&
-      !(error instanceof TaskMigrationError)
-    ) {
-      throw error;
-    }
+    if (!hasNodeErrorCode(error, 'ENOENT')) throw error;
   }
 
   return fallback;
