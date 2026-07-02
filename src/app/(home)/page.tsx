@@ -21,7 +21,7 @@ export default function HomePage() {
               <ArrowRight className="size-4" aria-hidden />
             </Link>
             <Link
-              href="/lessons"
+              href="/tasks"
               className="inline-flex h-11 items-center gap-2 rounded-md border border-zinc-200 px-5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
             >
               View Lessons
