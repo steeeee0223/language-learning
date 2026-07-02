@@ -4,13 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { lessonSchema, type LessonContent } from '@/lib/lesson-content.ts';
-import { createLearningPageTree } from '@/lib/lessons-page-tree.ts';
-import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/youtube.ts';
-import { buildTaskFile, TaskCreationError } from '@/lib/server/tasks.ts';
-import { readTask, updateTaskGeneration } from '@/lib/server/task-store.ts';
-import { listLessons, readLesson } from '@/lib/server/lessons.ts';
-import { fetchTranscriptBundle } from '@/lib/server/transcripts.ts';
+import { lessonSchema, type LessonContent } from '@/lib/lesson-content';
+import { createLearningPageTree } from '@/lib/lessons-page-tree';
+import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/schemas/youtube';
+import { ensureLocalDirs } from '@/lib/server/local-paths';
+import { buildTaskFile, TaskCreationError } from '@/lib/server/tasks';
+import { readTask, updateTaskGeneration } from '@/lib/server/task-store';
+import { listLessons, readLesson } from '@/lib/server/lessons';
+import { fetchTranscriptBundle } from '@/lib/server/transcripts';
 
 async function lessonFixture(overrides: { translatedTitle?: string } = {}): Promise<LessonContent> {
   const fixture = JSON.parse(
@@ -246,8 +247,6 @@ test('lesson helpers list and read only regular JSON lesson files', async () => 
   await writeLessonFixture(join(lessonsDir, '2026-06-27-salut.json'), {
     translatedTitle: 'Salut',
   });
-  await writeFile(join(lessonsDir, 'legacy.md'), '# Legacy markdown');
-  await writeFile(join(lessonsDir, 'legacy.mdx'), '# Legacy MDX');
   await writeFile(join(lessonsDir, 'notes.txt'), 'ignored');
   await mkdir(join(lessonsDir, 'directory.json'));
 
@@ -261,9 +260,6 @@ test('lesson helpers list and read only regular JSON lesson files', async () => 
   const lesson = await readLesson({ rootDir, slug: '2026-06-27-salut' });
   assert.deepEqual(lesson.content, await lessonFixture({ translatedTitle: 'Salut' }));
   assert.equal(lesson.filename, '2026-06-27-salut.json');
-  await assert.rejects(() => readLesson({ rootDir, slug: 'legacy' }), (error: unknown) => {
-    return error instanceof Error && 'code' in error && error.code === 'ENOENT';
-  });
   await assert.rejects(() => readLesson({ rootDir, slug: '../outside' }), /Invalid lesson slug/);
 });
 
@@ -337,6 +333,15 @@ test('readLesson preserves a task generation timestamp', async () => {
   assert.match(lesson.modifiedAt ?? '', /^\d{4}-\d{2}-\d{2}T/);
 });
 
+test('readLesson rejects malformed task metadata instead of using the lesson timestamp', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-task-metadata-malformed-'));
+  const paths = await ensureLocalDirs(rootDir);
+  await writeLessonFixture(join(paths.lessonsDir, 'malformed-task.json'));
+  await writeFile(join(paths.tasksDir, 'malformed-task.json'), '{not json');
+
+  await assert.rejects(() => readLesson({ rootDir, slug: 'malformed-task' }), SyntaxError);
+});
+
 test('readLesson rejects malformed JSON', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-lesson-malformed-'));
   const lessonsDir = join(rootDir, '.local', 'lessons');
@@ -355,24 +360,14 @@ test('listLessons rejects a syntactically invalid JSON lesson', async () => {
   await assert.rejects(() => listLessons({ rootDir }), SyntaxError);
 });
 
-test('readLesson rejects a JSON symlink instead of falling back to Markdown', async (context) => {
+test('readLesson rejects a JSON symlink', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-lesson-symlink-'));
   const lessonsDir = join(rootDir, '.local', 'lessons');
   const outsidePath = join(rootDir, 'outside.json');
   await mkdir(lessonsDir, { recursive: true });
   await writeLessonFixture(outsidePath, { translatedTitle: 'Outside' });
-  await writeFile(join(lessonsDir, 'linked.md'), '# Legacy fallback');
 
-  try {
-    await symlink(outsidePath, join(lessonsDir, 'linked.json'), 'file');
-  } catch (error) {
-    const code = error instanceof Error && 'code' in error ? error.code : undefined;
-    if (code === 'EPERM' || code === 'EACCES' || code === 'ENOSYS') {
-      context.skip(`Symlinks are unavailable: ${code}`);
-      return;
-    }
-    throw error;
-  }
+  await symlink(outsidePath, join(lessonsDir, 'linked.json'), 'file');
 
   await assert.rejects(() => readLesson({ rootDir, slug: 'linked' }), (error: unknown) => {
     return error instanceof Error && (/outside/i.test(error.message) || ('code' in error && error.code === 'ELOOP'));

@@ -4,20 +4,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
-import { apiErrorResponseSchema, taskCreationResponseSchema } from '@/lib/generation-contracts';
-import { taskListResponseSchema, type TaskListResponse } from '@/lib/task-contracts';
+import { readApiError } from '@/lib/client-http';
+import { taskCreationResponseSchema } from '@/lib/schemas/generation-contracts';
+import { taskListResponseSchema, type TaskListResponse } from '@/lib/schemas/task-contracts';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EllipsisIcon } from 'lucide-react';
 
-async function readError(response: Response) {
-  const payload: unknown = await response.json().catch(() => null);
-  const parsed = apiErrorResponseSchema.safeParse(payload);
-  return parsed.success ? parsed.data.error : 'Request failed.';
-}
-
 async function fetchTasks() {
   const response = await fetch('/api/tasks');
-  if (!response.ok) throw new Error(await readError(response));
+  if (!response.ok) throw new Error(await readApiError(response));
   return taskListResponseSchema.parse(await response.json());
 }
 
@@ -27,7 +22,7 @@ async function regenerateTask(taskId: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
   });
-  if (!response.ok) throw new Error(await readError(response));
+  if (!response.ok) throw new Error(await readApiError(response));
   return taskCreationResponseSchema.parse(await response.json());
 }
 
@@ -35,7 +30,7 @@ async function deleteTask(taskId: string) {
   const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
     method: 'DELETE',
   });
-  if (!response.ok) throw new Error(await readError(response));
+  if (!response.ok) throw new Error(await readApiError(response));
 }
 
 function formatCreatedAt(value: string) {

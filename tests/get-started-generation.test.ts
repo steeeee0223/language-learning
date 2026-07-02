@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { submitLessonGeneration } from '@/app/get-started/get-started-client.tsx';
+import { submitLessonGeneration } from '@/app/get-started/get-started-client';
 
 test('submitLessonGeneration creates then generates one task', async () => {
   const calls: Array<[string, unknown]> = [];

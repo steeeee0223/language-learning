@@ -1,9 +1,9 @@
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from 'fumadocs-ui/layouts/docs/page';
 
-import { LearningDocsLayout } from '@/components/learning-docs-layout.tsx';
-import { TasksClient } from '@/components/tasks-client.tsx';
-import { listLessons } from '@/lib/server/lessons.ts';
-import { listTaskGroups } from '@/lib/server/task-queries.ts';
+import { LearningDocsLayout } from '@/components/learning-docs-layout';
+import { TasksClient } from '@/components/tasks-client';
+import { listLessons } from '@/lib/server/lessons';
+import { listTaskGroups } from '@/lib/server/task-queries';
 
 export const dynamic = 'force-dynamic';
 

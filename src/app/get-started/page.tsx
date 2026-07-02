@@ -1,8 +1,8 @@
 import { LearningDocsLayout } from '@/components/learning-docs-layout';
-import { youtubeVideoIdSchema } from '@/lib/contracts.ts';
+import { youtubeVideoIdSchema } from '@/lib/schemas/contracts';
 import { listLessons } from '@/lib/server/lessons';
-import { readStory } from '@/lib/server/story-store.ts';
-import { storySummarySchema } from '@/lib/task-contracts.ts';
+import { readStory } from '@/lib/server/story-store';
+import { storySummarySchema } from '@/lib/schemas/task-contracts';
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from 'fumadocs-ui/layouts/docs/page';
 
 import { GetStartedClient } from './get-started-client';

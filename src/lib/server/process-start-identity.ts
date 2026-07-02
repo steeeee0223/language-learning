@@ -2,17 +2,15 @@ import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 
-function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error && error.code === code;
-}
+import { hasNodeErrorCode } from './node-utils';
 
 function processExists(pid: number) {
   try {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    if (hasErrorCode(error, 'ESRCH')) return false;
-    if (hasErrorCode(error, 'EPERM')) return true;
+    if (hasNodeErrorCode(error, 'ESRCH')) return false;
+    if (hasNodeErrorCode(error, 'EPERM')) return true;
     throw error;
   }
 }
@@ -38,7 +36,7 @@ async function resolveLinuxProcessStartIdentity(pid: number) {
     if (commandEnd < 0 || !startTicks) throw new Error('Could not parse the process start identity.');
     return `linux:${bootId.trim()}:${startTicks}`;
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT') && !processExists(pid)) return null;
+    if (hasNodeErrorCode(error, 'ENOENT') && !processExists(pid)) return null;
     return undefined;
   }
 }

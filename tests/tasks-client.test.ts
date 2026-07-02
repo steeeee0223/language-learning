@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import test from 'node:test';
 
-import { TasksClient } from '@/components/tasks-client.tsx';
+import { TasksClient } from '@/components/tasks-client';
 
 test('TasksClient renders grouped story and task data', () => {
   const queryClient = new QueryClient();

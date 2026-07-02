@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { ensureLocalDirs } from '@/lib/server/local-paths.ts';
-import { deleteTask, regenerateTask } from '@/lib/server/task-lifecycle.ts';
-import { listTaskGroups } from '@/lib/server/task-queries.ts';
-import { storySchema } from '@/lib/server/story-schema.ts';
-import { storedTaskSchema } from '@/lib/server/task-schema.ts';
-import { readTask } from '@/lib/server/task-store.ts';
+import { ensureLocalDirs } from '@/lib/server/local-paths';
+import { deleteTask, regenerateTask } from '@/lib/server/task-lifecycle';
+import { listTaskGroups } from '@/lib/server/task-queries';
+import { storySchema } from '@/lib/schemas/story-schema';
+import { storedTaskSchema } from '@/lib/schemas/task-schema';
+import { readTask } from '@/lib/server/task-store';
 
 async function createFixture() {
   const rootDir = await mkdtemp(join(tmpdir(), 'task-lifecycle-'));
@@ -78,16 +78,21 @@ test('listTaskGroups groups task summaries without transcripts', async () => {
   assert.equal(JSON.stringify(result).includes('Here we are.'), false);
 });
 
-test('listTaskGroups skips migration-conflicted task files', async () => {
+test('listTaskGroups rejects task files outside the current schema', async () => {
+  const { rootDir, paths } = await createFixture();
+  await writeFile(join(paths.tasksDir, 'unsupported-task.json'), '{"schemaVersion":3}\n');
+
+  await assert.rejects(() => listTaskGroups(rootDir));
+});
+
+test('readTask rejects a task whose ID differs from its filename', async () => {
   const { rootDir, paths, task } = await createFixture();
-  const legacyPath = join(paths.tasksDir, 'unsupported-legacy.json');
-  const legacySource = '{"schemaVersion":1}\n';
-  await writeFile(legacyPath, legacySource);
+  await writeFile(join(paths.tasksDir, 'different-name.json'), JSON.stringify(task));
 
-  const result = await listTaskGroups(rootDir);
-
-  assert.deepEqual(result.groups.flatMap((group) => group.tasks.map(({ id }) => id)), [task.id]);
-  assert.equal(await readFile(legacyPath, 'utf8'), legacySource);
+  await assert.rejects(
+    () => readTask('different-name', rootDir),
+    /Task ID must match its filename/,
+  );
 });
 
 test('regenerateTask copies settings and deleteTask removes task artifacts', async () => {

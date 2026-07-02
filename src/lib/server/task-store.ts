@@ -3,16 +3,15 @@ import { constants } from 'node:fs';
 import { open, rename, unlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { localSlugSchema } from '@/lib/generation-contracts';
+import { localSlugSchema } from '@/lib/schemas/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
-import { migrateLegacyTask, TaskMigrationError } from './task-migration';
 import { withTaskFileLock } from './task-file-lock';
 import {
   generationMetadataSchema,
   storedTaskSchema,
   type GenerationMetadata,
   type StoredTask,
-} from './task-schema';
+} from '../schemas/task-schema';
 
 function assertTaskSlug(slug: string) {
   localSlugSchema.parse(slug);
@@ -27,23 +26,12 @@ export async function readTask(slug: string, rootDir?: string): Promise<StoredTa
     file = await open(taskPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     const stats = await file.stat();
     if (!stats.isFile()) throw new Error('Task path is not a regular file.');
-    try {
-      const value: unknown = JSON.parse(await file.readFile('utf8'));
-      const current = storedTaskSchema.safeParse(value);
-      if (current.success) {
-        if (current.data.id !== slug) throw new TaskMigrationError('malformed-task');
-        return current.data;
-      }
-    } catch (error) {
-      if (!(error instanceof SyntaxError)) throw error;
-    }
+    const task = storedTaskSchema.parse(JSON.parse(await file.readFile('utf8')));
+    if (task.id !== slug) throw new Error('Task ID must match its filename.');
+    return task;
   } finally {
     await file?.close();
   }
-
-  const result = await migrateLegacyTask(slug, rootDir);
-  if (result.conflicts[0]) throw new TaskMigrationError(result.conflicts[0].reason);
-  return readTask(slug, rootDir);
 }
 
 export async function updateTaskGeneration(

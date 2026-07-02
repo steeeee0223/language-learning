@@ -3,7 +3,8 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import type { CodexStatus } from '@/lib/generation-contracts';
+import type { CodexStatus } from '@/lib/schemas/generation-contracts';
+import { hasNodeErrorCode } from './node-utils';
 
 const execFileAsync = promisify(execFile);
 const codexVersionPattern = /^codex-cli\s+\S+$/;
@@ -13,16 +14,14 @@ const unavailableRuntimePattern =
 
 function isModuleResolutionError(error: unknown) {
   return (
-    error instanceof Error &&
-    'code' in error &&
-    (error.code === 'MODULE_NOT_FOUND' ||
-      error.code === 'ERR_MODULE_NOT_FOUND' ||
-      error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED')
+    hasNodeErrorCode(error, 'MODULE_NOT_FOUND') ||
+    hasNodeErrorCode(error, 'ERR_MODULE_NOT_FOUND') ||
+    hasNodeErrorCode(error, 'ERR_PACKAGE_PATH_NOT_EXPORTED')
   );
 }
 
 function isMissingExecutableError(error: unknown) {
-  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+  return hasNodeErrorCode(error, 'ENOENT');
 }
 
 function errorOutput(error: unknown) {

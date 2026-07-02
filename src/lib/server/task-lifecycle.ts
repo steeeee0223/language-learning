@@ -1,12 +1,12 @@
 import { rm, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { generateLesson } from './generate-lesson.ts';
-import { GenerationError } from './generation-errors.ts';
-import { canonicalizeLocalRoot, ensureLocalDirs } from './local-paths.ts';
-import { tryAcquireTaskOperation } from './task-operation-lock.ts';
-import { readTask } from './task-store.ts';
-import { buildTaskFile } from './tasks.ts';
+import { generateLesson } from './generate-lesson';
+import { GenerationError } from './generation-errors';
+import { canonicalizeLocalRoot, ensureLocalDirs } from './local-paths';
+import { tryAcquireTaskOperation } from './task-operation-lock';
+import { readTask } from './task-store';
+import { buildTaskFile } from './tasks';
 
 type TaskLifecycleInput = {
   slug: string;

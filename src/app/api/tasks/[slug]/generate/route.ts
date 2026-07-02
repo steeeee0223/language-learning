@@ -1,26 +1,22 @@
 import { NextResponse } from 'next/server.js';
-import { z } from 'zod';
 
 import {
   generateLessonRequestSchema,
   generateLessonResponseSchema,
-  localSlugSchema,
-} from '@/lib/generation-contracts.ts';
-import { generateLesson } from '@/lib/server/generate-lesson.ts';
-import { GenerationError } from '@/lib/server/generation-errors.ts';
-import { jsonError } from '@/lib/server/http.ts';
+  localSlugParamsSchema,
+} from '@/lib/schemas/generation-contracts';
+import { generateLesson } from '@/lib/server/generate-lesson';
+import { GenerationError } from '@/lib/server/generation-errors';
+import { jsonError } from '@/lib/server/http';
 
 export const runtime = 'nodejs';
 
-const paramsSchema = z.strictObject({ slug: localSlugSchema });
-
-type GenerateRouteContext = {
-  params: Promise<unknown>;
-};
-
-export async function POST(request: Request, context: GenerateRouteContext) {
+export async function POST(
+  request: Request,
+  context: RouteContext<'/api/tasks/[slug]/generate'>,
+) {
   try {
-    const params = paramsSchema.safeParse(await context.params);
+    const params = localSlugParamsSchema.safeParse(await context.params);
     const payload = generateLessonRequestSchema.safeParse(
       await request.json().catch(() => null),
     );

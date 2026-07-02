@@ -10,8 +10,8 @@ export const targetLanguageSchema = z.enum(targetLanguages);
 
 const transcriptSegmentSchema = z.strictObject({
   text: z.string().nonempty(),
-  start: z.number().finite().nonnegative(),
-  duration: z.number().finite().nonnegative(),
+  start: z.number().nonnegative(),
+  duration: z.number().nonnegative(),
 });
 
 export const youtubeVideoIdSchema = z.string().regex(/^[A-Za-z0-9_-]{11}$/);

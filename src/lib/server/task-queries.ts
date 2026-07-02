@@ -1,22 +1,18 @@
 import { readdir } from 'node:fs/promises';
 
-import { taskListResponseSchema, type TaskListResponse } from '@/lib/task-contracts.ts';
-import { ensureLocalDirs } from './local-paths.ts';
-import { readStory } from './story-store.ts';
-import { migrateLegacyTasks } from './task-migration.ts';
-import { readTask } from './task-store.ts';
+import { taskListResponseSchema, type TaskListResponse } from '@/lib/schemas/task-contracts';
+import { ensureLocalDirs } from './local-paths';
+import { readStory } from './story-store';
+import { readTask } from './task-store';
 
 export async function listTaskGroups(rootDir?: string): Promise<TaskListResponse> {
   const paths = await ensureLocalDirs(rootDir);
-  const migration = await migrateLegacyTasks(paths.rootDir);
-  const conflictedTaskIds = new Set(migration.conflicts.map(({ id }) => id));
   const entries = await readdir(paths.tasksDir, { withFileTypes: true });
   const groups = new Map<string, TaskListResponse['groups'][number]>();
 
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
     const taskId = entry.name.slice(0, -'.json'.length);
-    if (conflictedTaskIds.has(taskId)) continue;
     const task = await readTask(taskId, paths.rootDir);
     let group = groups.get(task.storyId);
     if (!group) {

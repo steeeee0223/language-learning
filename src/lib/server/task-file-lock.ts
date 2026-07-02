@@ -2,8 +2,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { localSlugSchema } from '@/lib/generation-contracts';
+import { localSlugSchema } from '@/lib/schemas/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
+import { hasNodeErrorCode, sleep } from './node-utils';
 import { resolveProcessStartIdentity as resolveLocalProcessStartIdentity } from './process-start-identity';
 
 const TASK_FILE_LOCK_POLL_MS = 10;
@@ -17,16 +18,8 @@ type LockOwner = {
 
 export type ProcessStartIdentityResolver = (pid: number) => Promise<string | null>;
 
-function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error && error.code === code;
-}
-
 function isPathOccupiedError(error: unknown) {
-  return hasErrorCode(error, 'EEXIST') || hasErrorCode(error, 'ENOTEMPTY');
-}
-
-function delay(milliseconds: number) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+  return hasNodeErrorCode(error, 'EEXIST') || hasNodeErrorCode(error, 'ENOTEMPTY');
 }
 
 async function readOwner(lockPath: string): Promise<LockOwner | undefined> {
@@ -52,7 +45,7 @@ async function readOwner(lockPath: string): Promise<LockOwner | undefined> {
       };
     }
   } catch (error) {
-    if (!hasErrorCode(error, 'ENOENT') && !(error instanceof SyntaxError)) throw error;
+    if (!hasNodeErrorCode(error, 'ENOENT') && !(error instanceof SyntaxError)) throw error;
   }
   return undefined;
 }
@@ -105,6 +98,20 @@ async function publishOwnedDirectory(path: string, owner: LockOwner) {
   }
 }
 
+async function releaseOwnedDirectory(path: string, owner: LockOwner) {
+  const currentOwner = await readOwner(path);
+  if (!hasSameOwner(currentOwner, owner)) return;
+
+  const releasedPath = `${path}.released.${owner.token}`;
+  try {
+    await rename(path, releasedPath);
+  } catch (error) {
+    if (hasNodeErrorCode(error, 'ENOENT')) return;
+    throw error;
+  }
+  await rm(releasedPath, { recursive: true, force: true });
+}
+
 async function removeRecoverableOwnedDirectory(
   path: string,
   staleAfterMs: number,
@@ -114,7 +121,7 @@ async function removeRecoverableOwnedDirectory(
   try {
     initialStats = await stat(path);
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return true;
+    if (hasNodeErrorCode(error, 'ENOENT')) return true;
     throw error;
   }
   if (Date.now() - initialStats.mtimeMs <= staleAfterMs) return false;
@@ -125,7 +132,7 @@ async function removeRecoverableOwnedDirectory(
   try {
     currentStats = await stat(path);
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return true;
+    if (hasNodeErrorCode(error, 'ENOENT')) return true;
     throw error;
   }
   const currentOwner = await readOwner(path);
@@ -141,7 +148,7 @@ async function removeRecoverableOwnedDirectory(
   try {
     await rename(path, abandonedPath);
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return true;
+    if (hasNodeErrorCode(error, 'ENOENT')) return true;
     throw error;
   }
   await rm(abandonedPath, { recursive: true, force: true });
@@ -165,12 +172,7 @@ async function acquireRecoveryClaim(
 
   return {
     owner,
-    release: async () => {
-      const currentOwner = await readOwner(claimPath);
-      if (hasSameOwner(currentOwner, owner)) {
-        await rm(claimPath, { recursive: true, force: true });
-      }
-    },
+    release: () => releaseOwnedDirectory(claimPath, owner),
   };
 }
 
@@ -184,7 +186,7 @@ async function recoverStaleLock(
   try {
     initialStats = await stat(lockPath);
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return;
+    if (hasNodeErrorCode(error, 'ENOENT')) return;
     throw error;
   }
   if (Date.now() - initialStats.mtimeMs <= staleAfterMs) return;
@@ -219,7 +221,7 @@ async function recoverStaleLock(
     await rename(lockPath, abandonedPath);
     await rm(abandonedPath, { recursive: true, force: true });
   } catch (error) {
-    if (!hasErrorCode(error, 'ENOENT')) throw error;
+    if (!hasNodeErrorCode(error, 'ENOENT')) throw error;
   } finally {
     await claim.release();
   }
@@ -252,17 +254,12 @@ async function acquireTaskFileLock(
   while (true) {
     const owner = { ...processOwner, token: randomUUID() };
     if (await publishOwnedDirectory(lockPath, owner)) {
-      const release = async () => {
-        const currentOwner = await readOwner(lockPath);
-        if (hasSameOwner(currentOwner, owner)) {
-          await rm(lockPath, { recursive: true, force: true });
-        }
-      };
+      const release = () => releaseOwnedDirectory(lockPath, owner);
       return { release };
     }
 
     await recoverStaleLock(lockPath, staleAfterMs, processOwner, resolveProcessStartIdentity);
-    await delay(pollMs);
+    await sleep(pollMs);
   }
 }
 

@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test, { describe, it } from 'node:test';
+import test from 'node:test';
 
-import { GET as getLessons } from '@/app/api/lessons/route.ts';
-import { GET as getLesson } from '@/app/api/lessons/[slug]/route.ts';
-import { createStoriesPostHandler } from '@/lib/server/story-route.ts';
-import { POST as postTask } from '@/app/api/tasks/route.ts';
-import { POST as generateTask } from '@/app/api/tasks/[slug]/generate/route.ts';
-import { lessonSchema } from '@/lib/lesson-content.ts';
+import { GET as getLessons } from '@/app/api/lessons/route';
+import { GET as getLesson } from '@/app/api/lessons/[slug]/route';
+import { createStoriesPostHandler } from '@/lib/server/story-route';
+import { POST as postTask } from '@/app/api/tasks/route';
+import { POST as generateTask } from '@/app/api/tasks/[slug]/generate/route';
+import { lessonSchema } from '@/lib/lesson-content';
 
 async function validLessonJson() {
   const fixture = JSON.parse(
@@ -352,12 +352,4 @@ test('POST /api/tasks/[slug]/generate accepts only an empty request body', async
     if (originalRoot === undefined) delete process.env.LOCAL_DATA_ROOT;
     else process.env.LOCAL_DATA_ROOT = originalRoot;
   }
-});
-
-describe('Codex generation API', () => {
-  it.skip('GET /api/codex/status returns each Zod-defined readiness state');
-  it.skip('POST /api/tasks/[slug]/generate rejects invalid slugs and model presets');
-  it.skip('POST /api/tasks/[slug]/generate maps every GenerationError to its stable status and code');
-  it.skip('POST /api/tasks/[slug]/generate returns the validated lesson slug and path');
-  it.skip('POST /api/tasks/[slug]/generate never exposes raw SDK errors');
 });

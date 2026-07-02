@@ -1,6 +1,6 @@
 import type { TOCItemType } from 'fumadocs-core/toc';
 
-import { cefrLevels, type CefrLevel, type TargetLanguage } from '@/lib/contracts';
+import { cefrLevels, type CefrLevel, type TargetLanguage } from '@/lib/schemas/contracts';
 import type { LessonContent } from '@/lib/lesson-content';
 
 type LessonSection = 'metadata'|
