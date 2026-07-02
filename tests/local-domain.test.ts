@@ -355,7 +355,7 @@ test('listLessons rejects a syntactically invalid JSON lesson', async () => {
   await assert.rejects(() => listLessons({ rootDir }), SyntaxError);
 });
 
-test('readLesson rejects a JSON symlink instead of falling back to Markdown', async (context) => {
+test('readLesson rejects a JSON symlink instead of falling back to Markdown', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'language-learning-lesson-symlink-'));
   const lessonsDir = join(rootDir, '.local', 'lessons');
   const outsidePath = join(rootDir, 'outside.json');
@@ -363,16 +363,7 @@ test('readLesson rejects a JSON symlink instead of falling back to Markdown', as
   await writeLessonFixture(outsidePath, { translatedTitle: 'Outside' });
   await writeFile(join(lessonsDir, 'linked.md'), '# Legacy fallback');
 
-  try {
-    await symlink(outsidePath, join(lessonsDir, 'linked.json'), 'file');
-  } catch (error) {
-    const code = error instanceof Error && 'code' in error ? error.code : undefined;
-    if (code === 'EPERM' || code === 'EACCES' || code === 'ENOSYS') {
-      context.skip(`Symlinks are unavailable: ${code}`);
-      return;
-    }
-    throw error;
-  }
+  await symlink(outsidePath, join(lessonsDir, 'linked.json'), 'file');
 
   await assert.rejects(() => readLesson({ rootDir, slug: 'linked' }), (error: unknown) => {
     return error instanceof Error && (/outside/i.test(error.message) || ('code' in error && error.code === 'ELOOP'));

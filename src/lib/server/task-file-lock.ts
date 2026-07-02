@@ -98,6 +98,20 @@ async function publishOwnedDirectory(path: string, owner: LockOwner) {
   }
 }
 
+async function releaseOwnedDirectory(path: string, owner: LockOwner) {
+  const currentOwner = await readOwner(path);
+  if (!hasSameOwner(currentOwner, owner)) return;
+
+  const releasedPath = `${path}.released.${owner.token}`;
+  try {
+    await rename(path, releasedPath);
+  } catch (error) {
+    if (hasNodeErrorCode(error, 'ENOENT')) return;
+    throw error;
+  }
+  await rm(releasedPath, { recursive: true, force: true });
+}
+
 async function removeRecoverableOwnedDirectory(
   path: string,
   staleAfterMs: number,
@@ -158,12 +172,7 @@ async function acquireRecoveryClaim(
 
   return {
     owner,
-    release: async () => {
-      const currentOwner = await readOwner(claimPath);
-      if (hasSameOwner(currentOwner, owner)) {
-        await rm(claimPath, { recursive: true, force: true });
-      }
-    },
+    release: () => releaseOwnedDirectory(claimPath, owner),
   };
 }
 
@@ -245,12 +254,7 @@ async function acquireTaskFileLock(
   while (true) {
     const owner = { ...processOwner, token: randomUUID() };
     if (await publishOwnedDirectory(lockPath, owner)) {
-      const release = async () => {
-        const currentOwner = await readOwner(lockPath);
-        if (hasSameOwner(currentOwner, owner)) {
-          await rm(lockPath, { recursive: true, force: true });
-        }
-      };
+      const release = () => releaseOwnedDirectory(lockPath, owner);
       return { release };
     }
 

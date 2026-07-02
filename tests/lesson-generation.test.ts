@@ -384,23 +384,10 @@ describe('lesson persistence and generation coordination', () => {
     assert.equal(calls, 1);
   });
 
-  it('shares a generation lock across real and symlinked root paths', async (context) => {
+  it('shares a generation lock across real and symlinked root paths', async () => {
     const { rootDir } = await createStoredTaskFixture();
     const aliasRoot = `${rootDir}-alias`;
-    try {
-      await symlink(rootDir, aliasRoot, 'dir');
-    } catch (error) {
-      if (
-        process.platform === 'win32' &&
-        error instanceof Error &&
-        'code' in error &&
-        (error.code === 'EPERM' || error.code === 'EACCES')
-      ) {
-        context.skip('directory symlinks require additional Windows privileges');
-        return;
-      }
-      throw error;
-    }
+    await symlink(rootDir, aliasRoot, process.platform === 'win32' ? 'junction' : 'dir');
 
     const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
     let calls = 0;
@@ -473,23 +460,14 @@ describe('lesson persistence and generation coordination', () => {
     );
   });
 
-  it('rejects a redirected local storage directory before writing outside the root', async (context) => {
+  it('rejects a redirected local storage directory before writing outside the root', async () => {
     const rootDir = await mkdtemp(join(tmpdir(), 'lesson-contained-root-'));
     const externalDir = await mkdtemp(join(tmpdir(), 'lesson-external-root-'));
-    try {
-      await symlink(externalDir, join(rootDir, '.local'), 'dir');
-    } catch (error) {
-      if (
-        process.platform === 'win32' &&
-        error instanceof Error &&
-        'code' in error &&
-        (error.code === 'EPERM' || error.code === 'EACCES')
-      ) {
-        context.skip('directory symlinks require additional Windows privileges');
-        return;
-      }
-      throw error;
-    }
+    await symlink(
+      externalDir,
+      join(rootDir, '.local'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
 
     await assert.rejects(
       () => writeLessonOnce({ rootDir, slug: 'lesson', content: '# Escaped' }),
@@ -505,23 +483,14 @@ describe('lesson persistence and generation coordination', () => {
     );
   });
 
-  it('treats a dangling final lesson symlink as an existing lesson', async (context) => {
+  it('treats a dangling final lesson symlink as an existing lesson', async () => {
     const { rootDir } = await createStoredTaskFixture();
     const { lessonsDir } = await ensureLocalDirs(rootDir);
-    try {
-      await symlink(join(rootDir, 'missing-lesson.json'), join(lessonsDir, 'lesson.json'), 'file');
-    } catch (error) {
-      if (
-        process.platform === 'win32' &&
-        error instanceof Error &&
-        'code' in error &&
-        (error.code === 'EPERM' || error.code === 'EACCES')
-      ) {
-        context.skip('file symlinks require additional Windows privileges');
-        return;
-      }
-      throw error;
-    }
+    await symlink(
+      join(rootDir, 'missing-lesson.json'),
+      join(lessonsDir, 'lesson.json'),
+      process.platform === 'win32' ? 'junction' : 'file',
+    );
     let calls = 0;
 
     await assert.rejects(
