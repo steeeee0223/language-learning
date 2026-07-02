@@ -3,8 +3,8 @@ import { z } from 'zod';
 import {
   learningSettingsSchema,
   youtubeVideoIdSchema,
-} from '@/lib/contracts';
-import { generationErrorCodeSchema, localSlugSchema, modelPresetSchema } from '@/lib/generation-contracts';
+} from '@/lib/schemas/contracts';
+import { generationErrorCodeSchema, localSlugSchema, modelPresetSchema } from '@/lib/schemas/generation-contracts';
 
 export const TASK_SCHEMA_VERSION = 4 as const;
 export const LESSON_SKILL_VERSION = '4' as const;
@@ -20,7 +20,7 @@ export const generationMetadataSchema = z.strictObject({
   errorCode: generationErrorCodeSchema.optional(),
 });
 
-export const storedTaskV4Schema = z
+export const storedTaskSchema = z
   .strictObject({
     schemaVersion: z.literal(TASK_SCHEMA_VERSION),
     id: localSlugSchema,
@@ -47,8 +47,6 @@ export const storedTaskV4Schema = z
     message: 'Task output path must match its ID.',
     path: ['output', 'path'],
   });
-
-export const storedTaskSchema = storedTaskV4Schema;
 
 export type StoredTask = z.infer<typeof storedTaskSchema>;
 export type GenerationMetadata = z.infer<typeof generationMetadataSchema>;

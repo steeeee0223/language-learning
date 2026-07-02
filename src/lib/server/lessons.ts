@@ -3,7 +3,7 @@ import { open, readdir, realpath, type FileHandle } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { lessonSchema, type LessonContent } from '@/lib/lesson-content';
-import { localSlugSchema } from '@/lib/generation-contracts';
+import { localSlugSchema } from '@/lib/schemas/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
 import { hasNodeErrorCode } from './node-utils';
 import { isPathWithin } from './path-utils';

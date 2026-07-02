@@ -16,19 +16,19 @@ import {
   type CefrLevel,
   type LearningSettings,
   type TaskCreationRequest,
-} from '@/lib/contracts';
+} from '@/lib/schemas/contracts';
 import {
   codexStatusSchema,
   generateLessonResponseSchema,
   taskCreationResponseSchema,
   type ModelPreset,
-} from '@/lib/generation-contracts';
+} from '@/lib/schemas/generation-contracts';
 import { postJson } from '@/lib/client-http';
 import {
   storyResponseSchema,
   type StorySummary,
-} from '@/lib/task-contracts';
-import { parseYouTubeVideoId } from '@/lib/youtube';
+} from '@/lib/schemas/task-contracts';
+import { parseYouTubeVideoId } from '@/lib/schemas/youtube';
 
 type Post = (url: string, body: unknown) => Promise<unknown>;
 

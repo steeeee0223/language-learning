@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server.js';
 import { z } from 'zod';
 
-import type { TranscriptBundle } from '@/lib/contracts';
-import { storyResponseSchema } from '@/lib/task-contracts';
+import type { TranscriptBundle } from '@/lib/schemas/contracts';
+import { storyResponseSchema } from '@/lib/schemas/task-contracts';
 import { jsonError } from './http';
 import { createOrReuseStory, StoryCreationError } from './story-store';
 import { fetchTranscriptBundle } from './transcripts';

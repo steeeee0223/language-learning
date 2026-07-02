@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { lessonSchema, type LessonContent } from '@/lib/lesson-content';
 import { createLearningPageTree } from '@/lib/lessons-page-tree';
-import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/youtube';
+import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/schemas/youtube';
 import { ensureLocalDirs } from '@/lib/server/local-paths';
 import { buildTaskFile, TaskCreationError } from '@/lib/server/tasks';
 import { readTask, updateTaskGeneration } from '@/lib/server/task-store';

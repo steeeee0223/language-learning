@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { localSlugSchema } from '@/lib/generation-contracts';
+import { localSlugSchema } from '@/lib/schemas/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
 import { hasNodeErrorCode, sleep } from './node-utils';
 import { resolveProcessStartIdentity as resolveLocalProcessStartIdentity } from './process-start-identity';

@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 
 import { YouTubeEmbed } from '@/components/youtube-embed';
-import type { CefrLevel, TargetLanguage } from '@/lib/contracts';
+import type { CefrLevel, TargetLanguage } from '@/lib/schemas/contracts';
 import type { LessonContent } from '@/lib/lesson-content';
 import {
   lessonGrammarItemId,
@@ -12,7 +12,7 @@ import {
   lessonSpokenUsageItemId,
   orderCefrLevels,
 } from '@/lib/lesson-sections';
-import { isYouTubeVideoId } from '@/lib/youtube';
+import { isYouTubeVideoId } from '@/lib/schemas/youtube';
 
 type LessonProps = {
   content: LessonContent;

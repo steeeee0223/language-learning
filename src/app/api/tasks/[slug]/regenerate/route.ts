@@ -4,7 +4,7 @@ import {
   emptyRequestSchema,
   localSlugParamsSchema,
   taskCreationResponseSchema,
-} from '@/lib/generation-contracts';
+} from '@/lib/schemas/generation-contracts';
 import { GenerationError } from '@/lib/server/generation-errors';
 import { jsonError } from '@/lib/server/http';
 import { regenerateTask } from '@/lib/server/task-lifecycle';

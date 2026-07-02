@@ -4,7 +4,7 @@ import {
   normalizedTranscriptSchema,
   videoMetadataSchema,
   youtubeVideoIdSchema,
-} from '@/lib/contracts';
+} from '@/lib/schemas/contracts';
 
 const STORY_SCHEMA_VERSION = 1 as const;
 

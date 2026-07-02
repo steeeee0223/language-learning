@@ -1,4 +1,4 @@
-import type { GenerationErrorCode } from '@/lib/generation-contracts';
+import type { GenerationErrorCode } from '@/lib/schemas/generation-contracts';
 
 const statusByCode: Record<GenerationErrorCode, number> = {
   CODEX_NOT_INSTALLED: 503,

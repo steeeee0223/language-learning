@@ -1,4 +1,4 @@
-import { apiErrorResponseSchema } from './generation-contracts';
+import { apiErrorResponseSchema } from './schemas/generation-contracts';
 
 export async function readApiError(response: Response) {
   const payload: unknown = await response.json().catch(() => null);

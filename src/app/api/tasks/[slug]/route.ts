@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server.js';
 
-import { localSlugParamsSchema } from '@/lib/generation-contracts';
+import { localSlugParamsSchema } from '@/lib/schemas/generation-contracts';
 import { GenerationError } from '@/lib/server/generation-errors';
 import { jsonError } from '@/lib/server/http';
 import { deleteTask } from '@/lib/server/task-lifecycle';

@@ -9,10 +9,10 @@ import { GenerationError } from '@/lib/server/generation-errors';
 import { buildLessonPrompt } from '@/lib/server/lesson-prompt';
 import { ensureLocalDirs } from '@/lib/server/local-paths';
 import { resolveModelPreset } from '@/lib/server/model-registry';
-import { storySchema } from '@/lib/server/story-schema';
+import { storySchema } from '@/lib/schemas/story-schema';
 import { readTask } from '@/lib/server/task-store';
 import { writeLessonOnce } from '@/lib/server/lesson-writer';
-import { storedTaskSchema } from '@/lib/server/task-schema';
+import { storedTaskSchema } from '@/lib/schemas/task-schema';
 
 async function createStoredTaskFixture(options?: {
   generation?: Record<string, unknown>;

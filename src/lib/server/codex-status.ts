@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import type { CodexStatus } from '@/lib/generation-contracts';
+import type { CodexStatus } from '@/lib/schemas/generation-contracts';
 import { hasNodeErrorCode } from './node-utils';
 
 const execFileAsync = promisify(execFile);

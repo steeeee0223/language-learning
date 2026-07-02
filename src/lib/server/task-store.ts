@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { open, rename, unlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { localSlugSchema } from '@/lib/generation-contracts';
+import { localSlugSchema } from '@/lib/schemas/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
 import { withTaskFileLock } from './task-file-lock';
 import {
@@ -11,7 +11,7 @@ import {
   storedTaskSchema,
   type GenerationMetadata,
   type StoredTask,
-} from './task-schema';
+} from '../schemas/task-schema';
 
 function assertTaskSlug(slug: string) {
   localSlugSchema.parse(slug);

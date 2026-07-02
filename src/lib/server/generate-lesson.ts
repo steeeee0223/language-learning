@@ -11,7 +11,7 @@ import { lessonExists, writeLessonOnce } from './lesson-writer';
 import { canonicalizeLocalRoot } from './local-paths';
 import { resolveModelPreset } from './model-registry';
 import { readStory } from './story-store';
-import { LESSON_SKILL_VERSION, type StoredTask } from './task-schema';
+import { LESSON_SKILL_VERSION, type StoredTask } from '../schemas/task-schema';
 import { tryAcquireTaskOperation } from './task-operation-lock';
 import { readTask, updateTaskGeneration } from './task-store';
 

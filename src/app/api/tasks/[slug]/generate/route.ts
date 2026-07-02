@@ -4,7 +4,7 @@ import {
   generateLessonRequestSchema,
   generateLessonResponseSchema,
   localSlugParamsSchema,
-} from '@/lib/generation-contracts';
+} from '@/lib/schemas/generation-contracts';
 import { generateLesson } from '@/lib/server/generate-lesson';
 import { GenerationError } from '@/lib/server/generation-errors';
 import { jsonError } from '@/lib/server/http';

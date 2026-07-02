@@ -9,8 +9,8 @@ import {
   parseGeneratedLesson,
   parseLessonValue,
 } from '@/lib/lesson-content';
-import { storySchema } from '@/lib/server/story-schema';
-import { storedTaskSchema } from '@/lib/server/task-schema';
+import { storySchema } from '@/lib/schemas/story-schema';
+import { storedTaskSchema } from '@/lib/schemas/task-schema';
 
 const fallback = createFallbackLesson({
   video: { id: 'jNQXAC9IVRw', title: 'Me at the zoo' },

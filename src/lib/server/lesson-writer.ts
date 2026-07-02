@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { link, lstat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { localSlugSchema } from '@/lib/generation-contracts';
+import { localSlugSchema } from '@/lib/schemas/generation-contracts';
 import { GenerationError } from './generation-errors';
 import { ensureLocalDirs } from './local-paths';
 import { hasNodeErrorCode } from './node-utils';

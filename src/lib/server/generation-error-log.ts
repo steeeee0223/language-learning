@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
-import type { ModelPreset } from '@/lib/generation-contracts';
+import type { ModelPreset } from '@/lib/schemas/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
 
 export type GenerationStage =

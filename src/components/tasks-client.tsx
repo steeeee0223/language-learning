@@ -5,8 +5,8 @@ import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { readApiError } from '@/lib/client-http';
-import { taskCreationResponseSchema } from '@/lib/generation-contracts';
-import { taskListResponseSchema, type TaskListResponse } from '@/lib/task-contracts';
+import { taskCreationResponseSchema } from '@/lib/schemas/generation-contracts';
+import { taskListResponseSchema, type TaskListResponse } from '@/lib/schemas/task-contracts';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EllipsisIcon } from 'lucide-react';
 

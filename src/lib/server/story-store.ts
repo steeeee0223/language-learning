@@ -14,12 +14,12 @@ import {
 } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { transcriptBundleSchema, type TranscriptBundle } from '@/lib/contracts';
-import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/youtube';
+import { transcriptBundleSchema, type TranscriptBundle } from '@/lib/schemas/contracts';
+import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/schemas/youtube';
 import { ensureLocalDirs } from './local-paths';
 import { hasNodeErrorCode, sleep } from './node-utils';
 import { isPathWithin } from './path-utils';
-import { storySchema, type Story } from './story-schema';
+import { storySchema, type Story } from '../schemas/story-schema';
 import { runSingleFlightOperation } from './task-operation-lock';
 
 type CreateOrReuseStoryInput = {

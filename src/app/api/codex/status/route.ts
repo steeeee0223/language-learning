@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server.js';
 
-import { codexStatusSchema } from '@/lib/generation-contracts';
+import { codexStatusSchema } from '@/lib/schemas/generation-contracts';
 import { getCodexStatus } from '@/lib/server/codex-status';
 import { jsonError } from '@/lib/server/http';
 

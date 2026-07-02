@@ -5,14 +5,14 @@ import {
   targetLanguageSchema,
   type CefrLevel,
   type TargetLanguage,
-} from '@/lib/contracts';
+} from '@/lib/schemas/contracts';
 import {
   lessonLabels,
   lessonSectionLabels,
   orderCefrLevels,
 } from '@/lib/lesson-sections';
-import type { StoredTask } from '@/lib/server/task-schema';
-import type { Story } from '@/lib/server/story-schema';
+import type { StoredTask } from '@/lib/schemas/task-schema';
+import type { Story } from '@/lib/schemas/story-schema';
 
 const text = z.string().catch(() => '');
 const requiredText = z.string().refine((value) => value.trim().length > 0, 'Expected non-empty text');

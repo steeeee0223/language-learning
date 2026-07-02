@@ -1,6 +1,6 @@
 import { readdir } from 'node:fs/promises';
 
-import { taskListResponseSchema, type TaskListResponse } from '@/lib/task-contracts';
+import { taskListResponseSchema, type TaskListResponse } from '@/lib/schemas/task-contracts';
 import { ensureLocalDirs } from './local-paths';
 import { readStory } from './story-store';
 import { readTask } from './task-store';

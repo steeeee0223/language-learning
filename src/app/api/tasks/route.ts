@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server.js';
 
-import { taskCreationRequestSchema } from '@/lib/contracts';
-import { taskCreationResponseSchema } from '@/lib/generation-contracts';
-import { taskListResponseSchema } from '@/lib/task-contracts';
+import { taskCreationRequestSchema } from '@/lib/schemas/contracts';
+import { taskCreationResponseSchema } from '@/lib/schemas/generation-contracts';
+import { taskListResponseSchema } from '@/lib/schemas/task-contracts';
 import { jsonError } from '@/lib/server/http';
 import { listTaskGroups } from '@/lib/server/task-queries';
 import { buildTaskFile, TaskCreationError } from '@/lib/server/tasks';

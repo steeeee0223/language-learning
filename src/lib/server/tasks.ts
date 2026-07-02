@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { link, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { taskCreationRequestSchema, type TaskCreationRequest } from '@/lib/contracts';
-import { localSlugSchema } from '@/lib/generation-contracts';
+import { taskCreationRequestSchema, type TaskCreationRequest } from '@/lib/schemas/contracts';
+import { localSlugSchema } from '@/lib/schemas/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
 import { hasNodeErrorCode } from './node-utils';
 import { readStory, StoryStoreError } from './story-store';
-import { LESSON_SKILL_VERSION, requiredLessonSections, storedTaskSchema, TASK_SCHEMA_VERSION } from './task-schema';
+import { LESSON_SKILL_VERSION, requiredLessonSections, storedTaskSchema, TASK_SCHEMA_VERSION } from '../schemas/task-schema';
 
 type BuildTaskFileDependencies = {
   rootDir?: string;

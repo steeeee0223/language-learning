@@ -1,4 +1,4 @@
-import type { ModelPreset } from '@/lib/generation-contracts';
+import type { ModelPreset } from '@/lib/schemas/generation-contracts';
 
 const internalModels = {
   auto: undefined,
