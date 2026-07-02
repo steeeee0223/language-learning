@@ -3,6 +3,7 @@ import { z } from 'zod';
 const modelPresets = ['auto', 'fast', 'best'] as const;
 export const modelPresetSchema = z.enum(modelPresets);
 export const localSlugSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/);
+export const localSlugParamsSchema = z.strictObject({ slug: localSlugSchema });
 
 export const codexStatusSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('ready'), version: z.string().min(1) }),
@@ -10,7 +11,8 @@ export const codexStatusSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('not-authenticated'), version: z.string().min(1) }),
 ]);
 
-export const generateLessonRequestSchema = z.strictObject({});
+export const emptyRequestSchema = z.strictObject({});
+export const generateLessonRequestSchema = emptyRequestSchema;
 
 export const taskCreationResponseSchema = z.strictObject({
   taskId: localSlugSchema,
@@ -35,15 +37,18 @@ const generationErrorCodes = [
 ] as const;
 
 export const generationErrorCodeSchema = z.enum(generationErrorCodes);
-export const generationErrorResponseSchema = z.strictObject({
+const errorResponseShape = {
   error: z.string(),
-  code: generationErrorCodeSchema,
   errorPath: z.string().startsWith('.local/errors/').optional(),
+};
+
+export const generationErrorResponseSchema = z.strictObject({
+  ...errorResponseShape,
+  code: generationErrorCodeSchema,
 });
 export const apiErrorResponseSchema = z.strictObject({
-  error: z.string(),
+  ...errorResponseShape,
   code: generationErrorCodeSchema.optional(),
-  errorPath: z.string().startsWith('.local/errors/').optional(),
 });
 
 export type ModelPreset = z.infer<typeof modelPresetSchema>;

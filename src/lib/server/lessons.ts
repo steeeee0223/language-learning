@@ -1,13 +1,15 @@
 import { constants } from 'node:fs';
 import { open, readdir, realpath, type FileHandle } from 'node:fs/promises';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { lessonSchema, type LessonContent } from '@/lib/lesson-content';
+import { localSlugSchema } from '@/lib/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
+import { hasNodeErrorCode } from './node-utils';
+import { isPathWithin } from './path-utils';
 import { TaskMigrationError } from './task-migration';
 import { readTask } from './task-store';
 
-const LESSON_SLUG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const LESSON_EXTENSION = '.json';
 
 export type LessonListItem = {
@@ -59,7 +61,7 @@ async function readGeneratedAt(rootDir: string, slug: string, fallback: string) 
     return (await readTask(slug, rootDir)).createdAt;
   } catch (error) {
     if (
-      !isNotFoundError(error) &&
+      !hasNodeErrorCode(error, 'ENOENT') &&
       !(error instanceof SyntaxError) &&
       !(error instanceof TaskMigrationError)
     ) {
@@ -71,20 +73,15 @@ async function readGeneratedAt(rootDir: string, slug: string, fallback: string) 
 }
 
 function assertValidLessonSlug(slug: string) {
-  if (!LESSON_SLUG_PATTERN.test(slug)) {
+  if (!localSlugSchema.safeParse(slug).success) {
     throw new Error('Invalid lesson slug.');
   }
-}
-
-function isChildPath(parentPath: string, candidatePath: string) {
-  const relativePath = relative(parentPath, candidatePath);
-  return relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath);
 }
 
 function resolveLessonPath(lessonsDir: string, slug: string) {
   const absolutePath = resolve(lessonsDir, `${slug}${LESSON_EXTENSION}`);
 
-  if (!isChildPath(lessonsDir, absolutePath)) {
+  if (!isPathWithin(lessonsDir, absolutePath)) {
     throw new Error('Invalid lesson slug.');
   }
 
@@ -95,8 +92,21 @@ function parseLesson(content: string): LessonContent {
   return lessonSchema.parse(JSON.parse(content));
 }
 
-function isNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+async function readLessonFile(path: string) {
+  let file: FileHandle | undefined;
+  try {
+    file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const meta = await file.stat();
+    if (!meta.isFile()) {
+      throw new Error('Lesson path is not a regular file.');
+    }
+    return {
+      content: parseLesson(await file.readFile('utf8')),
+      modifiedAt: meta.mtime.toISOString(),
+    };
+  } finally {
+    await file?.close();
+  }
 }
 
 export async function listLessons(options: LessonOptions = {}): Promise<LessonListItem[]> {
@@ -111,7 +121,7 @@ export async function listLessons(options: LessonOptions = {}): Promise<LessonLi
     }
 
     const slug = entry.name.slice(0, -LESSON_EXTENSION.length);
-    if (!LESSON_SLUG_PATTERN.test(slug)) {
+    if (!localSlugSchema.safeParse(slug).success) {
       continue;
     }
 
@@ -121,29 +131,16 @@ export async function listLessons(options: LessonOptions = {}): Promise<LessonLi
   const lessons = await Promise.all(
     lessonEntries.map(async ({ name, slug }) => {
       const absolutePath = join(paths.lessonsDir, name);
-      let candidateFile: FileHandle | undefined;
+      const { content, modifiedAt } = await readLessonFile(absolutePath);
 
-      try {
-        candidateFile = await open(absolutePath, constants.O_RDONLY | constants.O_NOFOLLOW);
-        const meta = await candidateFile.stat();
-        if (!meta.isFile()) {
-          throw new Error('Lesson path is not a regular file.');
-        }
-
-        const content = parseLesson(await candidateFile.readFile('utf8'));
-        const modifiedAt = meta.mtime.toISOString();
-
-        return {
-          slug,
-          title: lessonTitle(slug, content),
-          filename: name,
-          path: `.local/lessons/${name}`,
-          modifiedAt,
-          generatedAt: await readGeneratedAt(paths.rootDir, slug, modifiedAt),
-        };
-      } finally {
-        await candidateFile?.close();
-      }
+      return {
+        slug,
+        title: lessonTitle(slug, content),
+        filename: name,
+        path: `.local/lessons/${name}`,
+        modifiedAt,
+        generatedAt: await readGeneratedAt(paths.rootDir, slug, modifiedAt),
+      };
     }),
   );
 
@@ -163,31 +160,19 @@ export async function readLesson(options: ReadLessonOptions): Promise<LessonDeta
   const absolutePath = resolveLessonPath(lessonsDir, options.slug);
   const candidateRealPath = await realpath(absolutePath);
 
-  if (!isChildPath(lessonsDir, candidateRealPath)) {
+  if (!isPathWithin(lessonsDir, candidateRealPath)) {
     throw new Error('Lesson path is outside the lessons directory.');
   }
 
-  let candidateFile: FileHandle | undefined;
-  try {
-    candidateFile = await open(absolutePath, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const meta = await candidateFile.stat();
-    if (!meta.isFile()) {
-      throw new Error('Lesson path is not a regular file.');
-    }
+  const { content, modifiedAt } = await readLessonFile(absolutePath);
 
-    const content = parseLesson(await candidateFile.readFile('utf8'));
-    const modifiedAt = meta.mtime.toISOString();
-
-    return {
-      slug: options.slug,
-      title: lessonTitle(options.slug, content),
-      filename,
-      path: `.local/lessons/${filename}`,
-      modifiedAt,
-      generatedAt: await readGeneratedAt(paths.rootDir, options.slug, modifiedAt),
-      content,
-    };
-  } finally {
-    await candidateFile?.close();
-  }
+  return {
+    slug: options.slug,
+    title: lessonTitle(options.slug, content),
+    filename,
+    path: `.local/lessons/${filename}`,
+    modifiedAt,
+    generatedAt: await readGeneratedAt(paths.rootDir, options.slug, modifiedAt),
+    content,
+  };
 }

@@ -17,6 +17,7 @@ import { isDeepStrictEqual } from 'node:util';
 
 import { localSlugSchema } from '@/lib/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
+import { hasNodeErrorCode } from './node-utils';
 import { storySchema } from './story-schema';
 import { persistStoryIfAbsent } from './story-store';
 import { withTaskFileLock } from './task-file-lock';
@@ -70,10 +71,6 @@ type CandidateReadResult =
   | { current: true }
   | { candidate: LegacyCandidate };
 
-function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error && error.code === code;
-}
-
 async function readRegularFileIdentity(path: string) {
   let file: FileHandle | undefined;
   try {
@@ -94,7 +91,7 @@ async function ensureRealDirectory(path: string) {
   try {
     await mkdir(path);
   } catch (error) {
-    if (!hasErrorCode(error, 'EEXIST')) throw error;
+    if (!hasNodeErrorCode(error, 'EEXIST')) throw error;
   }
   const stats = await lstat(path);
   if (stats.isSymbolicLink() || !stats.isDirectory()) {
@@ -107,7 +104,7 @@ async function pathExists(path: string) {
     await lstat(path);
     return true;
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return false;
+    if (hasNodeErrorCode(error, 'ENOENT')) return false;
     throw error;
   }
 }
@@ -137,14 +134,14 @@ async function normalizeLegacyError(
       staged = await readRegularFileIdentity(stagingPath);
       if (await pathExists(flatPath)) return false;
     } catch (error) {
-      if (!hasErrorCode(error, 'ENOENT')) return false;
+      if (!hasNodeErrorCode(error, 'ENOENT')) return false;
       let source: Awaited<ReturnType<typeof readRegularFileIdentity>>;
       try {
         source = await readRegularFileIdentity(flatPath);
       } catch (flatError) {
-        if (hasErrorCode(flatError, 'ENOENT')) {
+        if (hasNodeErrorCode(flatError, 'ENOENT')) {
           await rmdir(stagingDir).catch((error: unknown) => {
-            if (!hasErrorCode(error, 'ENOENT') && !hasErrorCode(error, 'ENOTEMPTY')) throw error;
+            if (!hasNodeErrorCode(error, 'ENOENT') && !hasNodeErrorCode(error, 'ENOTEMPTY')) throw error;
           });
           return true;
         }
@@ -167,7 +164,7 @@ async function normalizeLegacyError(
       await link(stagingPath, targetPath);
       linked = true;
     } catch (error) {
-      if (!hasErrorCode(error, 'EEXIST')) throw error;
+      if (!hasNodeErrorCode(error, 'EEXIST')) throw error;
     }
 
     if (linked) await dependencies.afterDiagnosticLink?.();
@@ -316,7 +313,7 @@ export async function migrateLegacyTask(
     try {
       parsed = await readCandidate(slug, tasksDir);
     } catch (error) {
-      if (hasErrorCode(error, 'ENOENT')) throw error;
+      if (hasNodeErrorCode(error, 'ENOENT')) throw error;
       return { migrated: 0, conflicts: [{ id: slug, reason: 'malformed-task' }] };
     }
     if ('current' in parsed) return { migrated: 0, conflicts: [] };
@@ -372,7 +369,7 @@ export async function migrateLegacyTasks(
       migrated += result.migrated;
       conflicts.push(...result.conflicts);
     } catch (error) {
-      if (!hasErrorCode(error, 'ENOENT')) throw error;
+      if (!hasNodeErrorCode(error, 'ENOENT')) throw error;
     }
   }
   return { migrated, conflicts };

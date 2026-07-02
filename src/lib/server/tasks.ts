@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { taskCreationRequestSchema, type TaskCreationRequest } from '@/lib/contracts';
 import { localSlugSchema } from '@/lib/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
+import { hasNodeErrorCode } from './node-utils';
 import { readStory, StoryStoreError } from './story-store';
 import { LESSON_SKILL_VERSION, requiredLessonSections, storedTaskSchema, TASK_SCHEMA_VERSION } from './task-schema';
 
@@ -26,10 +27,6 @@ export class TaskCreationError extends Error {
     super('Task creation failed.', options);
     this.name = 'TaskCreationError';
   }
-}
-
-function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error && error.code === code;
 }
 
 export async function buildTaskFile(
@@ -79,7 +76,7 @@ export async function buildTaskFile(
       try {
         await link(tempPath, finalPath);
       } catch (error) {
-        if (hasErrorCode(error, 'EEXIST')) continue;
+        if (hasNodeErrorCode(error, 'EEXIST')) continue;
         throw error;
       }
     } finally {

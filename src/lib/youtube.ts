@@ -1,7 +1,7 @@
-const VIDEO_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
+import { youtubeVideoIdSchema } from './contracts';
 
 export function isYouTubeVideoId(value: string): boolean {
-  return VIDEO_ID_PATTERN.test(value);
+  return youtubeVideoIdSchema.safeParse(value).success;
 }
 
 export function parseYouTubeVideoId(input: string): string {

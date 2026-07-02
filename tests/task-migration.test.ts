@@ -6,6 +6,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   symlink,
   utimes,
@@ -562,7 +563,9 @@ test('an old mtime does not make a live matching process owner recoverable', asy
 
   await new Promise((resolve) => setTimeout(resolve, 90));
   assert.equal(secondEntered, false);
-  await rm(lockDir, { recursive: true });
+  const releasedLockDir = `${lockDir}.released`;
+  await rename(lockDir, releasedLockDir);
+  await rm(releasedLockDir, { recursive: true });
   await second;
   assert.equal(secondEntered, true);
 });

@@ -1,5 +1,8 @@
 import { lstat, mkdir, realpath } from 'node:fs/promises';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+
+import { hasNodeErrorCode } from './node-utils';
+import { isPathWithin } from './path-utils';
 
 function getLocalPaths(baseDir: string) {
   const localDir = join(baseDir, '.local');
@@ -18,25 +21,16 @@ function getLocalPaths(baseDir: string) {
   };
 }
 
-function isMissing(error: unknown) {
-  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
-}
-
-function isContained(rootDir: string, candidate: string) {
-  const pathFromRoot = relative(rootDir, candidate);
-  return pathFromRoot === '' || (!pathFromRoot.startsWith('..') && !isAbsolute(pathFromRoot));
-}
-
 async function ensureRealDirectory(path: string, rootDir: string) {
   let stats;
   try {
     stats = await lstat(path);
   } catch (error) {
-    if (!isMissing(error)) throw error;
+    if (!hasNodeErrorCode(error, 'ENOENT')) throw error;
     try {
       await mkdir(path);
     } catch (mkdirError) {
-      if (!(mkdirError instanceof Error && 'code' in mkdirError && mkdirError.code === 'EEXIST')) {
+      if (!hasNodeErrorCode(mkdirError, 'EEXIST')) {
         throw mkdirError;
       }
     }
@@ -48,7 +42,7 @@ async function ensureRealDirectory(path: string, rootDir: string) {
   }
 
   const canonicalPath = await realpath(path);
-  if (!isContained(rootDir, canonicalPath)) {
+  if (!isPathWithin(rootDir, canonicalPath, { allowSame: true })) {
     throw new Error('Local storage must remain inside its configured root.');
   }
 }

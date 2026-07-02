@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { localSlugSchema } from '@/lib/generation-contracts';
 import { GenerationError } from './generation-errors';
 import { ensureLocalDirs } from './local-paths';
+import { hasNodeErrorCode } from './node-utils';
 
 export async function lessonExists(input: { rootDir?: string; slug: string }) {
   if (!localSlugSchema.safeParse(input.slug).success) return false;
@@ -14,7 +15,7 @@ export async function lessonExists(input: { rootDir?: string; slug: string }) {
     await lstat(join(lessonsDir, `${input.slug}.json`));
     return true;
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return false;
+    if (hasNodeErrorCode(error, 'ENOENT')) return false;
     throw new GenerationError('LESSON_WRITE_FAILED', 'The lesson path could not be checked.', {
       cause: error,
     });
@@ -39,7 +40,7 @@ export async function writeLessonOnce(input: {
     await writeFile(tempPath, input.content, { encoding: 'utf8', flag: 'wx' });
     await link(tempPath, finalPath);
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
+    if (hasNodeErrorCode(error, 'EEXIST')) {
       throw new GenerationError('LESSON_EXISTS', 'A lesson already exists for this task.', {
         cause: error,
       });

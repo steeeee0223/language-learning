@@ -18,12 +18,12 @@ import {
   type TaskCreationRequest,
 } from '@/lib/contracts';
 import {
-  apiErrorResponseSchema,
   codexStatusSchema,
   generateLessonResponseSchema,
   taskCreationResponseSchema,
   type ModelPreset,
 } from '@/lib/generation-contracts';
+import { postJson } from '@/lib/client-http';
 import {
   storyResponseSchema,
   type StorySummary,
@@ -31,20 +31,6 @@ import {
 import { parseYouTubeVideoId } from '@/lib/youtube';
 
 type Post = (url: string, body: unknown) => Promise<unknown>;
-
-async function postJson(url: string, body: unknown) {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = apiErrorResponseSchema.safeParse(payload);
-    throw new Error(error.success ? error.data.error : 'Request failed.');
-  }
-  return payload;
-}
 
 export async function submitLessonGeneration(input: TaskCreationRequest, post: Post = postJson) {
   const task = taskCreationResponseSchema.parse(await post('/api/tasks', input));

@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
-import { cefrLevelSchema, targetLanguageSchema } from './contracts';
+import { cefrLevelSchema, targetLanguageSchema, youtubeVideoIdSchema } from './contracts';
 import { localSlugSchema, modelPresetSchema } from './generation-contracts';
 
 export const storySummarySchema = z.strictObject({
-  id: z.string().regex(/^[A-Za-z0-9_-]{11}$/),
+  id: youtubeVideoIdSchema,
   title: z.string().nonempty(),
   url: z.url(),
   createdAt: z.iso.datetime(),

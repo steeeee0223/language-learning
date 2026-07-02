@@ -26,12 +26,7 @@ const generatedVocabItemSchema = z.strictObject({
   translation: requiredText,
   usage: requiredText,
 });
-const generatedGrammarItemSchema = z.strictObject({
-  title: requiredText,
-  explanation: requiredText,
-  examples: z.array(generatedExampleSchema).min(1),
-});
-const generatedSpokenUsageItemSchema = z.strictObject({
+const generatedExplanationItemSchema = z.strictObject({
   title: requiredText,
   explanation: requiredText,
   examples: z.array(generatedExampleSchema).min(1),
@@ -53,8 +48,8 @@ const generatedLessonSchema = z.strictObject({
     z.strictObject({ time: requiredText, source: requiredText, translation: requiredText }),
   ),
   vocabs: z.record(z.string(), z.array(generatedVocabItemSchema).min(1)),
-  grammars: z.record(z.string(), z.array(generatedGrammarItemSchema).min(1)),
-  spokenUsage: z.array(generatedSpokenUsageItemSchema).min(1),
+  grammars: z.record(z.string(), z.array(generatedExplanationItemSchema).min(1)),
+  spokenUsage: z.array(generatedExplanationItemSchema).min(1),
 });
 
 const transcriptSchema = z
@@ -66,46 +61,32 @@ const exampleSchema = z
 const vocabItemSchema = z
   .object({ source: text, translation: text, usage: text })
   .catch(() => ({ source: '', translation: '', usage: '' }));
-const grammarItemSchema = z
+const explanationItemSchema = z
   .object({
     title: text,
     explanation: text,
     examples: z.array(exampleSchema).catch(() => []),
   })
   .catch(() => ({ title: '', explanation: '', examples: [] }));
-const spokenUsageItemSchema = z
-  .object({
-    title: text,
-    explanation: text,
-    examples: z.array(exampleSchema).catch(() => []),
-  })
-  .catch(() => ({ title: '', explanation: '', examples: [] }));
-const vocabRecordSchema = z
-  .record(z.string(), z.array(vocabItemSchema).catch(() => []))
-  .catch(() => ({}))
-  .transform((record) => {
-    const result: Partial<Record<CefrLevel, z.infer<typeof vocabItemSchema>[]>> = {};
 
-    for (const [key, items] of Object.entries(record)) {
-      const level = cefrLevelSchema.safeParse(key);
-      if (level.success) result[level.data] = items;
-    }
+function cefrRecordSchema<Item>(itemSchema: z.ZodType<Item>) {
+  return z
+    .record(z.string(), z.array(itemSchema).catch(() => [] as Item[]))
+    .catch(() => ({}))
+    .transform((record) => {
+      const result: Partial<Record<CefrLevel, Item[]>> = {};
 
-    return result;
-  });
-const grammarRecordSchema = z
-  .record(z.string(), z.array(grammarItemSchema).catch(() => []))
-  .catch(() => ({}))
-  .transform((record) => {
-    const result: Partial<Record<CefrLevel, z.infer<typeof grammarItemSchema>[]>> = {};
+      for (const [key, items] of Object.entries(record)) {
+        const level = cefrLevelSchema.safeParse(key);
+        if (level.success) result[level.data] = items;
+      }
 
-    for (const [key, items] of Object.entries(record)) {
-      const level = cefrLevelSchema.safeParse(key);
-      if (level.success) result[level.data] = items;
-    }
+      return result;
+    });
+}
 
-    return result;
-  });
+const vocabRecordSchema = cefrRecordSchema(vocabItemSchema);
+const grammarRecordSchema = cefrRecordSchema(explanationItemSchema);
 
 export const lessonSchema = z.object({
   schemaVersion: z.literal(1).catch(() => 1 as const),
@@ -128,7 +109,7 @@ export const lessonSchema = z.object({
   transcripts: z.array(transcriptSchema).catch(() => []),
   vocabs: vocabRecordSchema,
   grammars: grammarRecordSchema,
-  spokenUsage: z.array(spokenUsageItemSchema).catch(() => []),
+  spokenUsage: z.array(explanationItemSchema).catch(() => []),
 });
 
 export type LessonContent = z.infer<typeof lessonSchema>;

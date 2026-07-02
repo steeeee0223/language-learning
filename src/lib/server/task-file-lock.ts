@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { localSlugSchema } from '@/lib/generation-contracts';
 import { ensureLocalDirs } from './local-paths';
+import { hasNodeErrorCode, sleep } from './node-utils';
 import { resolveProcessStartIdentity as resolveLocalProcessStartIdentity } from './process-start-identity';
 
 const TASK_FILE_LOCK_POLL_MS = 10;
@@ -17,16 +18,8 @@ type LockOwner = {
 
 export type ProcessStartIdentityResolver = (pid: number) => Promise<string | null>;
 
-function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error && error.code === code;
-}
-
 function isPathOccupiedError(error: unknown) {
-  return hasErrorCode(error, 'EEXIST') || hasErrorCode(error, 'ENOTEMPTY');
-}
-
-function delay(milliseconds: number) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+  return hasNodeErrorCode(error, 'EEXIST') || hasNodeErrorCode(error, 'ENOTEMPTY');
 }
 
 async function readOwner(lockPath: string): Promise<LockOwner | undefined> {
@@ -52,7 +45,7 @@ async function readOwner(lockPath: string): Promise<LockOwner | undefined> {
       };
     }
   } catch (error) {
-    if (!hasErrorCode(error, 'ENOENT') && !(error instanceof SyntaxError)) throw error;
+    if (!hasNodeErrorCode(error, 'ENOENT') && !(error instanceof SyntaxError)) throw error;
   }
   return undefined;
 }
@@ -114,7 +107,7 @@ async function removeRecoverableOwnedDirectory(
   try {
     initialStats = await stat(path);
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return true;
+    if (hasNodeErrorCode(error, 'ENOENT')) return true;
     throw error;
   }
   if (Date.now() - initialStats.mtimeMs <= staleAfterMs) return false;
@@ -125,7 +118,7 @@ async function removeRecoverableOwnedDirectory(
   try {
     currentStats = await stat(path);
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return true;
+    if (hasNodeErrorCode(error, 'ENOENT')) return true;
     throw error;
   }
   const currentOwner = await readOwner(path);
@@ -141,7 +134,7 @@ async function removeRecoverableOwnedDirectory(
   try {
     await rename(path, abandonedPath);
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return true;
+    if (hasNodeErrorCode(error, 'ENOENT')) return true;
     throw error;
   }
   await rm(abandonedPath, { recursive: true, force: true });
@@ -184,7 +177,7 @@ async function recoverStaleLock(
   try {
     initialStats = await stat(lockPath);
   } catch (error) {
-    if (hasErrorCode(error, 'ENOENT')) return;
+    if (hasNodeErrorCode(error, 'ENOENT')) return;
     throw error;
   }
   if (Date.now() - initialStats.mtimeMs <= staleAfterMs) return;
@@ -219,7 +212,7 @@ async function recoverStaleLock(
     await rename(lockPath, abandonedPath);
     await rm(abandonedPath, { recursive: true, force: true });
   } catch (error) {
-    if (!hasErrorCode(error, 'ENOENT')) throw error;
+    if (!hasNodeErrorCode(error, 'ENOENT')) throw error;
   } finally {
     await claim.release();
   }
@@ -262,7 +255,7 @@ async function acquireTaskFileLock(
     }
 
     await recoverStaleLock(lockPath, staleAfterMs, processOwner, resolveProcessStartIdentity);
-    await delay(pollMs);
+    await sleep(pollMs);
   }
 }
 
