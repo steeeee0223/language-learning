@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server.js';
 import { z } from 'zod';
 
-import { localSlugSchema } from '@/lib/generation-contracts.ts';
-import { GenerationError } from '@/lib/server/generation-errors.ts';
-import { jsonError } from '@/lib/server/http.ts';
-import { deleteTask } from '@/lib/server/task-lifecycle.ts';
+import { localSlugSchema } from '@/lib/generation-contracts';
+import { GenerationError } from '@/lib/server/generation-errors';
+import { jsonError } from '@/lib/server/http';
+import { deleteTask } from '@/lib/server/task-lifecycle';
 
 const paramsSchema = z.strictObject({ slug: localSlugSchema });
 

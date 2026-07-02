@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { describe, it } from 'node:test';
 
-import { GET as getLessons } from '@/app/api/lessons/route.ts';
-import { GET as getLesson } from '@/app/api/lessons/[slug]/route.ts';
-import { createStoriesPostHandler } from '@/lib/server/story-route.ts';
-import { POST as postTask } from '@/app/api/tasks/route.ts';
-import { POST as generateTask } from '@/app/api/tasks/[slug]/generate/route.ts';
-import { lessonSchema } from '@/lib/lesson-content.ts';
+import { GET as getLessons } from '@/app/api/lessons/route';
+import { GET as getLesson } from '@/app/api/lessons/[slug]/route';
+import { createStoriesPostHandler } from '@/lib/server/story-route';
+import { POST as postTask } from '@/app/api/tasks/route';
+import { POST as generateTask } from '@/app/api/tasks/[slug]/generate/route';
+import { lessonSchema } from '@/lib/lesson-content';
 
 async function validLessonJson() {
   const fixture = JSON.parse(

@@ -4,9 +4,9 @@ import { join } from 'node:path';
 
 import { taskCreationRequestSchema, type TaskCreationRequest } from '@/lib/contracts';
 import { localSlugSchema } from '@/lib/generation-contracts';
-import { ensureLocalDirs } from './local-paths.ts';
-import { readStory, StoryStoreError } from './story-store.ts';
-import { LESSON_SKILL_VERSION, requiredLessonSections, storedTaskSchema, TASK_SCHEMA_VERSION } from './task-schema.ts';
+import { ensureLocalDirs } from './local-paths';
+import { readStory, StoryStoreError } from './story-store';
+import { LESSON_SKILL_VERSION, requiredLessonSections, storedTaskSchema, TASK_SCHEMA_VERSION } from './task-schema';
 
 type BuildTaskFileDependencies = {
   rootDir?: string;

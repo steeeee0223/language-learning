@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { createOrReuseStory, readStory, StoryStoreError } from '@/lib/server/story-store.ts';
-import type { Story } from '@/lib/server/story-schema.ts';
+import { createOrReuseStory, readStory, StoryStoreError } from '@/lib/server/story-store';
+import type { Story } from '@/lib/server/story-schema';
 
 const url = 'https://youtu.be/jNQXAC9IVRw';
 const bundle = {

@@ -4,15 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { generateLesson } from '@/lib/server/generate-lesson.ts';
-import { GenerationError } from '@/lib/server/generation-errors.ts';
-import { buildLessonPrompt } from '@/lib/server/lesson-prompt.ts';
-import { ensureLocalDirs } from '@/lib/server/local-paths.ts';
-import { resolveModelPreset } from '@/lib/server/model-registry.ts';
-import { storySchema } from '@/lib/server/story-schema.ts';
-import { readTask } from '@/lib/server/task-store.ts';
-import { writeLessonOnce } from '@/lib/server/lesson-writer.ts';
-import { storedTaskSchema } from '@/lib/server/task-schema.ts';
+import { generateLesson } from '@/lib/server/generate-lesson';
+import { GenerationError } from '@/lib/server/generation-errors';
+import { buildLessonPrompt } from '@/lib/server/lesson-prompt';
+import { ensureLocalDirs } from '@/lib/server/local-paths';
+import { resolveModelPreset } from '@/lib/server/model-registry';
+import { storySchema } from '@/lib/server/story-schema';
+import { readTask } from '@/lib/server/task-store';
+import { writeLessonOnce } from '@/lib/server/lesson-writer';
+import { storedTaskSchema } from '@/lib/server/task-schema';
 
 async function createStoredTaskFixture(options?: {
   generation?: Record<string, unknown>;

@@ -6,29 +6,29 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
-import { Button } from '@/components/ui/button.tsx';
-import { Checkbox } from '@/components/ui/checkbox.tsx';
-import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field.tsx';
-import { Input } from '@/components/ui/input.tsx';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group.tsx';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   cefrLevels,
   type CefrLevel,
   type LearningSettings,
   type TaskCreationRequest,
-} from '@/lib/contracts.ts';
+} from '@/lib/contracts';
 import {
   apiErrorResponseSchema,
   codexStatusSchema,
   generateLessonResponseSchema,
   taskCreationResponseSchema,
   type ModelPreset,
-} from '@/lib/generation-contracts.ts';
+} from '@/lib/generation-contracts';
 import {
   storyResponseSchema,
   type StorySummary,
-} from '@/lib/task-contracts.ts';
-import { parseYouTubeVideoId } from '@/lib/youtube.ts';
+} from '@/lib/task-contracts';
+import { parseYouTubeVideoId } from '@/lib/youtube';
 
 type Post = (url: string, body: unknown) => Promise<unknown>;
 

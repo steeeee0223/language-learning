@@ -1,5 +1,5 @@
-import type { TranscriptBundle, TranscriptSegment } from '../contracts.ts';
-import { parseYouTubeVideoId } from '../youtube.ts';
+import type { TranscriptBundle, TranscriptSegment } from '../contracts';
+import { parseYouTubeVideoId } from '../youtube';
 
 const TRANSCRIPT_ENDPOINT = 'https://www.youtube-transcript.io/api/transcripts';
 

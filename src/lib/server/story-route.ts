@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server.js';
 import { z } from 'zod';
 
-import type { TranscriptBundle } from '@/lib/contracts.ts';
-import { storyResponseSchema } from '@/lib/task-contracts.ts';
-import { jsonError } from './http.ts';
-import { createOrReuseStory, StoryCreationError } from './story-store.ts';
-import { fetchTranscriptBundle } from './transcripts.ts';
+import type { TranscriptBundle } from '@/lib/contracts';
+import { storyResponseSchema } from '@/lib/task-contracts';
+import { jsonError } from './http';
+import { createOrReuseStory, StoryCreationError } from './story-store';
+import { fetchTranscriptBundle } from './transcripts';
 
 const createStoryRequestSchema = z.strictObject({ url: z.url() });
 

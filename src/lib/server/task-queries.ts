@@ -1,10 +1,10 @@
 import { readdir } from 'node:fs/promises';
 
-import { taskListResponseSchema, type TaskListResponse } from '@/lib/task-contracts.ts';
-import { ensureLocalDirs } from './local-paths.ts';
-import { readStory } from './story-store.ts';
-import { migrateLegacyTasks } from './task-migration.ts';
-import { readTask } from './task-store.ts';
+import { taskListResponseSchema, type TaskListResponse } from '@/lib/task-contracts';
+import { ensureLocalDirs } from './local-paths';
+import { readStory } from './story-store';
+import { migrateLegacyTasks } from './task-migration';
+import { readTask } from './task-store';
 
 export async function listTaskGroups(rootDir?: string): Promise<TaskListResponse> {
   const paths = await ensureLocalDirs(rootDir);

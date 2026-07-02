@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { readTask } from '@/lib/server/task-store.ts';
+import { readTask } from '@/lib/server/task-store';
 
 const videoId = 'jNQXAC9IVRw';
 

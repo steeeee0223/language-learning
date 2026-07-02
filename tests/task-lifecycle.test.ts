@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { ensureLocalDirs } from '@/lib/server/local-paths.ts';
-import { deleteTask, regenerateTask } from '@/lib/server/task-lifecycle.ts';
-import { listTaskGroups } from '@/lib/server/task-queries.ts';
-import { storySchema } from '@/lib/server/story-schema.ts';
-import { storedTaskSchema } from '@/lib/server/task-schema.ts';
-import { readTask } from '@/lib/server/task-store.ts';
+import { ensureLocalDirs } from '@/lib/server/local-paths';
+import { deleteTask, regenerateTask } from '@/lib/server/task-lifecycle';
+import { listTaskGroups } from '@/lib/server/task-queries';
+import { storySchema } from '@/lib/server/story-schema';
+import { storedTaskSchema } from '@/lib/server/task-schema';
+import { readTask } from '@/lib/server/task-store';
 
 async function createFixture() {
   const rootDir = await mkdtemp(join(tmpdir(), 'task-lifecycle-'));

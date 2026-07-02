@@ -1,4 +1,4 @@
-import type { LessonGenerationSource } from '../lesson-content.ts';
+import type { LessonGenerationSource } from '../lesson-content';
 
 export function buildLessonPrompt({ task, story }: LessonGenerationSource) {
   const transcript = story.transcript.segments

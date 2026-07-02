@@ -4,13 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { lessonSchema, type LessonContent } from '@/lib/lesson-content.ts';
-import { createLearningPageTree } from '@/lib/lessons-page-tree.ts';
-import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/youtube.ts';
-import { buildTaskFile, TaskCreationError } from '@/lib/server/tasks.ts';
-import { readTask, updateTaskGeneration } from '@/lib/server/task-store.ts';
-import { listLessons, readLesson } from '@/lib/server/lessons.ts';
-import { fetchTranscriptBundle } from '@/lib/server/transcripts.ts';
+import { lessonSchema, type LessonContent } from '@/lib/lesson-content';
+import { createLearningPageTree } from '@/lib/lessons-page-tree';
+import { isYouTubeVideoId, parseYouTubeVideoId } from '@/lib/youtube';
+import { buildTaskFile, TaskCreationError } from '@/lib/server/tasks';
+import { readTask, updateTaskGeneration } from '@/lib/server/task-store';
+import { listLessons, readLesson } from '@/lib/server/lessons';
+import { fetchTranscriptBundle } from '@/lib/server/transcripts';
 
 async function lessonFixture(overrides: { translatedTitle?: string } = {}): Promise<LessonContent> {
   const fixture = JSON.parse(

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { taskCreationRequestSchema } from '@/lib/contracts.ts';
+import { taskCreationRequestSchema } from '@/lib/contracts';
 import {
   generationErrorResponseSchema,
   taskCreationResponseSchema,
-} from '@/lib/generation-contracts.ts';
-import { storedTaskSchema } from '@/lib/server/task-schema.ts';
+} from '@/lib/generation-contracts';
+import { storedTaskSchema } from '@/lib/server/task-schema';
 
 const canonicalTask = {
   storyId: 'jNQXAC9IVRw',

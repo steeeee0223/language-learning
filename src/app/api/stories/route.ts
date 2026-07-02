@@ -1,3 +1,3 @@
-import { createStoriesPostHandler } from '@/lib/server/story-route.ts';
+import { createStoriesPostHandler } from '@/lib/server/story-route';
 
 export const POST = createStoriesPostHandler();

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import { cefrLevelSchema, targetLanguageSchema } from './contracts.ts';
-import { localSlugSchema, modelPresetSchema } from './generation-contracts.ts';
+import { cefrLevelSchema, targetLanguageSchema } from './contracts';
+import { localSlugSchema, modelPresetSchema } from './generation-contracts';
 
 export const storySummarySchema = z.strictObject({
   id: z.string().regex(/^[A-Za-z0-9_-]{11}$/),

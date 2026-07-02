@@ -2,10 +2,10 @@ import { constants } from 'node:fs';
 import { open, readFile, readdir, realpath, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { lessonSchema, type LessonContent } from '@/lib/lesson-content.ts';
-import { ensureLocalDirs } from './local-paths.ts';
-import { TaskMigrationError } from './task-migration.ts';
-import { readTask } from './task-store.ts';
+import { lessonSchema, type LessonContent } from '@/lib/lesson-content';
+import { ensureLocalDirs } from './local-paths';
+import { TaskMigrationError } from './task-migration';
+import { readTask } from './task-store';
 
 const LESSON_SLUG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const LESSON_EXTENSION = '.json';

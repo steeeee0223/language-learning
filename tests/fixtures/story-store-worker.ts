@@ -1,7 +1,7 @@
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { createOrReuseStory } from '@/lib/server/story-store.ts';
+import { createOrReuseStory } from '@/lib/server/story-store';
 
 const [rootDir, label, serializedOptions] = process.argv.slice(2);
 if (!rootDir || !label) throw new Error('Expected a root directory and worker label.');
