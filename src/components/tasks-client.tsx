@@ -3,9 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 
-import { Button } from '@/components/ui/button.tsx';
-import { apiErrorResponseSchema, taskCreationResponseSchema } from '@/lib/generation-contracts.ts';
-import { taskListResponseSchema, type TaskListResponse } from '@/lib/task-contracts.ts';
+import { Button } from '@/components/ui/button';
+import { apiErrorResponseSchema, taskCreationResponseSchema } from '@/lib/generation-contracts';
+import { taskListResponseSchema, type TaskListResponse } from '@/lib/task-contracts';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { EllipsisIcon } from 'lucide-react';
 
 async function readError(response: Response) {
   const payload: unknown = await response.json().catch(() => null);
@@ -59,10 +61,10 @@ export function TasksClient({ initialData }: { initialData: TaskListResponse }) 
   }
 
   return (
-    <div className="not-prose flex flex-col gap-5">
-      {error ? <p className="text-sm text-destructive">{error.message}</p> : null}
+    <div className="not-prose flex flex-col">
+      {error ? <p className="text-sm text-destructive mb-5">{error.message}</p> : null}
       {tasksQuery.data.groups.map((group) => (
-        <details key={group.story.id} open className="border-y">
+        <details key={group.story.id} open className="hover:bg-accent px-2">
           <summary className="flex cursor-pointer items-center justify-between gap-4 py-3 font-medium">
             <span>{group.story.title}</span>
             <Button
@@ -90,7 +92,17 @@ export function TasksClient({ initialData }: { initialData: TaskListResponse }) 
                 {group.tasks.map((task) => (
                   <tr key={task.id} className="border-b last:border-b-0">
                     <td className="py-3 pr-4 font-mono text-xs">
-                      {task.lessonUrl ? <Link href={task.lessonUrl}>{task.id}</Link> : task.id}
+                      {task.lessonUrl ? 
+                        <Button 
+                          variant="link"
+                          nativeButton={false}
+                          render={
+                            <Link href={task.lessonUrl}/>
+                          }
+                        >
+                          {task.id}
+                        </Button>
+                       : task.id}
                     </td>
                     <td className="py-3 pr-4 capitalize">{task.status}</td>
                     <td className="py-3 pr-4">{task.cefrLevels.join(', ')}</td>
@@ -100,29 +112,33 @@ export function TasksClient({ initialData }: { initialData: TaskListResponse }) 
                       {formatCreatedAt(task.createdAt)}
                     </td>
                     <td className="py-3 text-right whitespace-nowrap">
-                      <div className="flex justify-end gap-2">
-                        {task.status !== 'pending' ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={isMutating}
-                            onClick={() => regenerate.mutate(task.id)}
-                          >
-                            Regenerate
-                          </Button>
-                        ) : null}
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={isMutating}
-                          onClick={() => {
-                            if (window.confirm('Delete this task and its local artifacts?')) {
-                              remove.mutate(task.id);
-                            }
-                          }}
-                        >
-                          Delete
-                        </Button>
+                      <div className="flex justify-end">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger 
+                            render={<Button variant="ghost" size="icon-xs" disabled={isMutating} aria-label="Task actions">
+                              <EllipsisIcon />
+                            </Button>} 
+                          />
+                          <DropdownMenuContent>
+                            <DropdownMenuGroup>
+                              {task.status !== 'pending' && (
+                                <DropdownMenuItem onClick={() => regenerate.mutate(task.id)}>
+                                  Regenerate
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => {
+                                  if (window.confirm('Delete this task and its local artifacts?')) {
+                                    remove.mutate(task.id);
+                                  }
+                                }}
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>

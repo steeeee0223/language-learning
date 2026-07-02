@@ -14,7 +14,7 @@ export function createLearningPageTree(lessons: LessonListItem[]): Root {
       },
       {
         type: 'page',
-        name: 'Tasks',
+        name: 'Stories',
         url: '/tasks',
       },
       {

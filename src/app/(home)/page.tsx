@@ -15,16 +15,16 @@ export default function HomePage() {
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
               href="/get-started"
-              className="inline-flex h-11 items-center gap-2 rounded-md bg-zinc-950 px-5 text-sm font-medium text-white transition hover:bg-zinc-800"
+              className="group inline-flex h-11 items-center gap-2 rounded-md bg-zinc-950 px-5 text-sm font-medium text-white transition hover:bg-zinc-800"
             >
               Get Started
-              <ArrowRight className="size-4" aria-hidden />
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-1.5" aria-hidden />
             </Link>
             <Link
               href="/tasks"
               className="inline-flex h-11 items-center gap-2 rounded-md border border-zinc-200 px-5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
             >
-              View Lessons
+              View Stories
               <FileText className="size-4" aria-hidden />
             </Link>
           </div>

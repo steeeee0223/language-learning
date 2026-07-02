@@ -13,7 +13,7 @@ export default async function TasksPage() {
   return (
     <LearningDocsLayout lessons={lessons}>
       <DocsPage toc={[]}>
-        <DocsTitle>Tasks</DocsTitle>
+        <DocsTitle>Stories</DocsTitle>
         <DocsDescription>Manage lesson generation tasks grouped by YouTube story.</DocsDescription>
         <DocsBody>
           <TasksClient initialData={tasks} />
