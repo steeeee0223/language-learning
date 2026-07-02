@@ -9,6 +9,7 @@ import {
   parseGeneratedLesson,
   parseLessonValue,
 } from '@/lib/lesson-content.ts';
+import { storySchema } from '@/lib/server/story-schema.ts';
 import { storedTaskSchema } from '@/lib/server/task-schema.ts';
 
 const fallback = createFallbackLesson({
@@ -19,8 +20,9 @@ const fallback = createFallbackLesson({
   transcripts: [{ time: '00:00', source: 'Here we are.', translation: 'Here we are.' }],
 });
 
-const task = storedTaskSchema.parse({
-  schemaVersion: 3,
+const story = storySchema.parse({
+  schemaVersion: 1,
+  id: 'jNQXAC9IVRw',
   createdAt: '2026-06-30T00:00:00.000Z',
   video: {
     url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
@@ -35,13 +37,23 @@ const task = storedTaskSchema.parse({
       { text: 'That is pretty much all there is to say.', start: 125.2, duration: 3 },
     ],
   },
+});
+
+const task = storedTaskSchema.parse({
+  schemaVersion: 4,
+  id: 'lesson',
+  storyId: story.id,
+  createdAt: '2026-06-30T00:00:00.000Z',
   learningSettings: { targetLanguage: 'zh', cefrLevels: ['B1', 'A2'] },
+  modelPreset: 'best',
   output: { format: 'json', path: '.local/lessons/lesson.json' },
   instructions: {
     requiredSections: ['metadata', 'translation', 'vocabulary', 'grammar', 'spokenUsage'],
   },
-  generation: { status: 'pending', skillVersion: '3' },
+  generation: { status: 'pending', skillVersion: '4' },
 });
+
+const generationSource = { task, story };
 
 describe('formatTimestamp', () => {
   it('floors fractional seconds and formats them as mm:ss', () => {
@@ -159,7 +171,7 @@ describe('lessonToPlainText', () => {
 
 describe('parseGeneratedLesson', () => {
   it('rejects malformed generated JSON instead of returning fallback content', () => {
-    assert.throws(() => parseGeneratedLesson('{not JSON', task), /valid JSON/i);
+    assert.throws(() => parseGeneratedLesson('{not JSON', generationSource), /valid JSON/i);
   });
 
   it('rejects malformed containers instead of repairing generated content', () => {
@@ -191,7 +203,7 @@ describe('parseGeneratedLesson', () => {
         () =>
           parseGeneratedLesson(
             JSON.stringify({ schemaVersion: 1, ...metadata, ...pedagogicalSections }),
-            task,
+            generationSource,
           ),
         /lesson contract/i,
       );
@@ -213,7 +225,7 @@ describe('parseGeneratedLesson', () => {
               D1: [{ title: 'Invalid', explanation: 'Ignored.', examples: [] }],
             },
           }),
-          task,
+          generationSource,
         ),
       /lesson contract/i,
     );
@@ -268,7 +280,7 @@ describe('parseGeneratedLesson', () => {
         },
         spokenUsage,
       }),
-      task,
+      generationSource,
     );
 
     assert.deepEqual(result.video, {

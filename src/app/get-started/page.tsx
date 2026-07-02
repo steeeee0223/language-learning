@@ -1,21 +1,41 @@
 import { LearningDocsLayout } from '@/components/learning-docs-layout';
+import { youtubeVideoIdSchema } from '@/lib/contracts.ts';
 import { listLessons } from '@/lib/server/lessons';
+import { readStory } from '@/lib/server/story-store.ts';
+import { storySummarySchema } from '@/lib/task-contracts.ts';
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from 'fumadocs-ui/layouts/docs/page';
 
 import { GetStartedClient } from './get-started-client';
 
-export default async function GetStartedPage() {
-  const lessons = await listLessons();
+export default async function GetStartedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ story?: string | string[] }>;
+}) {
+  const requestedStory = youtubeVideoIdSchema.safeParse((await searchParams).story);
+  const initialStoryPromise = requestedStory.success
+    ? readStory(requestedStory.data)
+        .then((story) =>
+          storySummarySchema.parse({
+            id: story.id,
+            title: story.video.title,
+            url: story.video.url,
+            createdAt: story.createdAt,
+          }),
+        )
+        .catch(() => undefined)
+    : Promise.resolve(undefined);
+  const [initialStory, lessons] = await Promise.all([initialStoryPromise, listLessons()]);
 
   return (
     <LearningDocsLayout lessons={lessons}>
       <DocsPage toc={[]}>
         <DocsTitle>Get Started</DocsTitle>
         <DocsDescription>
-          Prepare a lesson from a YouTube transcript, then generate it in the app with your signed-in Codex account.
+          Add or reuse a YouTube story, choose lesson settings, and generate with your signed-in Codex account.
         </DocsDescription>
         <DocsBody>
-          <GetStartedClient />
+          <GetStartedClient initialStory={initialStory} />
         </DocsBody>
       </DocsPage>
     </LearningDocsLayout>

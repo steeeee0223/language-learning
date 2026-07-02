@@ -4,7 +4,8 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { lessonSchema, type LessonContent } from '@/lib/lesson-content.ts';
 import { ensureLocalDirs } from './local-paths.ts';
-import { storedTaskSchema } from './task-schema.ts';
+import { TaskMigrationError } from './task-migration.ts';
+import { readTask } from './task-store.ts';
 
 const LESSON_SLUG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const LESSON_EXTENSION = '.json';
@@ -53,14 +54,15 @@ function lessonTitle(slug: string, content: LessonContent) {
   return translatedTitle || titleFromSlug(slug);
 }
 
-async function readGeneratedAt(tasksDir: string, slug: string, fallback: string) {
+async function readGeneratedAt(rootDir: string, slug: string, fallback: string) {
   try {
-    const parsed = storedTaskSchema.safeParse(JSON.parse(await readFile(join(tasksDir, `${slug}.json`), 'utf8')));
-    if (parsed.success) {
-      return parsed.data.createdAt;
-    }
+    return (await readTask(slug, rootDir)).createdAt;
   } catch (error) {
-    if (!isNotFoundError(error) && !(error instanceof SyntaxError)) {
+    if (
+      !isNotFoundError(error) &&
+      !(error instanceof SyntaxError) &&
+      !(error instanceof TaskMigrationError)
+    ) {
       throw error;
     }
   }
@@ -137,7 +139,7 @@ export async function listLessons(options: LessonOptions = {}): Promise<LessonLi
           filename: name,
           path: `.local/lessons/${name}`,
           modifiedAt,
-          generatedAt: await readGeneratedAt(paths.tasksDir, slug, modifiedAt),
+          generatedAt: await readGeneratedAt(paths.rootDir, slug, modifiedAt),
         };
       } finally {
         await candidateFile?.close();
@@ -182,7 +184,7 @@ export async function readLesson(options: ReadLessonOptions): Promise<LessonDeta
       filename,
       path: `.local/lessons/${filename}`,
       modifiedAt,
-      generatedAt: await readGeneratedAt(paths.tasksDir, options.slug, modifiedAt),
+      generatedAt: await readGeneratedAt(paths.rootDir, options.slug, modifiedAt),
       content,
     };
   } finally {

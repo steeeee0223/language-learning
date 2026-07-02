@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 
 import { baseOptions } from '@/lib/layout.shared';
-import { createLessonsPageTree } from '@/lib/lessons-page-tree';
+import { createLearningPageTree } from '@/lib/lessons-page-tree';
 import type { LessonListItem } from '@/lib/server/lessons';
 
 type LearningDocsLayoutProps = {
@@ -12,7 +12,7 @@ type LearningDocsLayoutProps = {
 
 export function LearningDocsLayout({ children, lessons }: LearningDocsLayoutProps) {
   return (
-    <DocsLayout {...baseOptions()} tree={createLessonsPageTree(lessons)} tabs={false}>
+    <DocsLayout {...baseOptions()} tree={createLearningPageTree(lessons)} tabs={false}>
       {children}
     </DocsLayout>
   );

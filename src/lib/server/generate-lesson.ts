@@ -1,4 +1,3 @@
-import type { ModelPreset } from '@/lib/generation-contracts';
 import { parseGeneratedLesson } from '@/lib/lesson-content';
 import {
   OpenAICodexLessonGenerator,
@@ -11,13 +10,13 @@ import { buildLessonPrompt } from './lesson-prompt';
 import { lessonExists, writeLessonOnce } from './lesson-writer';
 import { canonicalizeLocalRoot } from './local-paths';
 import { resolveModelPreset } from './model-registry';
+import { readStory } from './story-store';
 import { LESSON_SKILL_VERSION, type StoredTask } from './task-schema';
 import { tryAcquireTaskOperation } from './task-operation-lock';
 import { readTask, updateTaskGeneration } from './task-store';
 
 type GenerateLessonInput = {
   slug: string;
-  modelPreset: ModelPreset;
   rootDir?: string;
   signal?: AbortSignal;
 };
@@ -82,6 +81,7 @@ export async function generateLesson(
 
   try {
     task = await readTask(input.slug, dataRoot);
+    const story = await readStory(task.storyId, dataRoot);
 
     const expectedOutputPath = `.local/lessons/${input.slug}.json`;
     if (task.output.path !== expectedOutputPath) {
@@ -95,7 +95,7 @@ export async function generateLesson(
       throw new GenerationError('LESSON_EXISTS', 'A lesson already exists for this task.');
     }
 
-    requestedModel = resolveModelPreset(input.modelPreset);
+    requestedModel = resolveModelPreset(task.modelPreset);
     stage = 'status';
     const status = await (dependencies.getStatus ?? getCodexStatus)();
     if (status.status === 'not-installed') {
@@ -113,7 +113,6 @@ export async function generateLesson(
       {
         status: 'pending',
         skillVersion: LESSON_SKILL_VERSION,
-        modelPreset: input.modelPreset,
         requestedModel,
         codexVersion,
         startedAt,
@@ -129,7 +128,7 @@ export async function generateLesson(
       : timeoutSignal;
     stage = 'generation';
     const content = await generateUntilAbort(generator, {
-      prompt: buildLessonPrompt(task),
+      prompt: buildLessonPrompt({ task, story }),
       model: requestedModel,
       signal: generationSignal,
     });
@@ -138,7 +137,7 @@ export async function generateLesson(
     stage = 'validation';
     let lesson;
     try {
-      lesson = parseGeneratedLesson(content, task);
+      lesson = parseGeneratedLesson(content, { task, story });
     } catch (cause) {
       throw new GenerationError(
         'GENERATION_INVALID',
@@ -161,7 +160,6 @@ export async function generateLesson(
         {
           status: 'succeeded',
           skillVersion: LESSON_SKILL_VERSION,
-          modelPreset: input.modelPreset,
           requestedModel,
           codexVersion,
           startedAt,
@@ -186,7 +184,7 @@ export async function generateLesson(
       error,
       stage,
       generatedContent,
-      modelPreset: input.modelPreset,
+      modelPreset: task?.modelPreset ?? 'auto',
       requestedModel,
       codexVersion,
       startedAt,
@@ -198,7 +196,6 @@ export async function generateLesson(
         {
           status: 'failed',
           skillVersion: LESSON_SKILL_VERSION,
-          modelPreset: input.modelPreset,
           requestedModel,
           codexVersion,
           startedAt,

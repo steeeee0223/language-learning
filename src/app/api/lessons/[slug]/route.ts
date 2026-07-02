@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server.js';
 
-import { getErrorMessage, jsonError } from '../../../../lib/server/http.ts';
-import { readLesson } from '../../../../lib/server/lessons.ts';
+import { getErrorMessage, jsonError } from '@/lib/server/http.ts';
+import { readLesson } from '@/lib/server/lessons.ts';
 
 type LessonRouteContext = {
   params: Promise<unknown>;
