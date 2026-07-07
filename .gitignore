@@ -10,6 +10,7 @@
 /.next/
 /out/
 /build
+/dist-electron/
 *.tsbuildinfo
 
 # misc

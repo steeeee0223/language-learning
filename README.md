@@ -95,3 +95,16 @@ pnpm build
 ```
 
 `pnpm build` uses `next build --webpack` because the current Fumadocs MDX setup builds reliably through webpack in this workspace.
+
+## Desktop MVP
+
+Run the Electron desktop shell in development:
+
+```bash
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+source "$NVM_DIR/nvm.sh"
+nvm use 24.11.1 --silent
+$NVM_BIN/pnpm electron:dev
+```
+
+The desktop shell starts the local Next.js server with `LOCAL_DATA_ROOT` set to Electron's app data directory unless a custom data folder is configured.

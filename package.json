@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "dist-electron/main.js",
   "packageManager": "pnpm@11.0.8",
   "engines": {
     "node": "24.11.1",
@@ -11,6 +12,10 @@
   "scripts": {
     "build": "next build --webpack",
     "dev": "next dev",
+    "electron:compile": "tsx scripts/build-electron.ts",
+    "electron:dev": "tsx scripts/build-electron.ts && electron . --dev",
+    "electron:build": "tsx scripts/build-electron.ts && next build --webpack && tsx scripts/prepare-electron-server.ts",
+    "electron:dist": "tsx scripts/build-electron.ts && next build --webpack && tsx scripts/prepare-electron-server.ts && electron-builder --mac dir",
     "start": "next start",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "fumadocs-mdx && next typegen && tsc --noEmit",
@@ -42,6 +47,9 @@
     "@types/node": "^25.9.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.9",
     "postcss": "^8.5.15",
