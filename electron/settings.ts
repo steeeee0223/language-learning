@@ -6,8 +6,11 @@ import type {
   DesktopSettings,
   ResolvedDesktopDataRoot,
 } from './types';
+import { hasNodeErrorCode } from '@/lib/server/node-utils';
 
 const settingsFileName = 'settings.json';
+
+
 
 export function settingsPath(userDataPath: string) {
   return join(userDataPath, settingsFileName);
@@ -32,8 +35,14 @@ export async function writeDesktopSettings(path: string, settings: DesktopSettin
 
 export async function validateDataRoot(path: string) {
   const resolved = resolve(path);
-  await mkdir(resolved, { recursive: true });
-  const stats = await stat(resolved);
+  let stats;
+  try {
+    stats = await stat(resolved);
+  } catch (error) {
+    if (!hasNodeErrorCode(error, 'ENOENT')) throw error;
+    await mkdir(resolved, { recursive: true });
+    stats = await stat(resolved);
+  }
 
   if (!stats.isDirectory()) {
     throw new Error('Data root must be a directory.');
