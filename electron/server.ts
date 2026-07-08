@@ -5,6 +5,16 @@ import { join } from 'node:path';
 
 import type { StartedNextServer, StartNextServerInput } from './types';
 
+type ServerChildProcess = Pick<
+  ChildProcess,
+  'exitCode' | 'signalCode' | 'kill'
+> & {
+  once(
+    event: 'exit',
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void,
+  ): unknown;
+};
+
 async function findFreePort() {
   const server = createServer();
   server.listen(0, '127.0.0.1');
@@ -38,7 +48,7 @@ async function waitForServer(url: string) {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
-function stopChild(child: ChildProcess) {
+function stopChild(child: ServerChildProcess) {
   return new Promise<void>((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null) {
       resolve();
@@ -80,6 +90,18 @@ function earlyExitError(code: number | null, signal: NodeJS.Signals | null) {
   return new Error(`Next server exited before becoming ready (${detail}).`);
 }
 
+export async function waitForReadyOrStopChild(input: {
+  child: ServerChildProcess;
+  waitForReady(): Promise<void>;
+}) {
+  try {
+    await input.waitForReady();
+  } catch (error) {
+    await stopChild(input.child);
+    throw error;
+  }
+}
+
 export async function startNextServer(
   input: StartNextServerInput,
 ): Promise<StartedNextServer> {
@@ -111,7 +133,10 @@ export async function startNextServer(
     });
   });
 
-  await Promise.race([waitForServer(url), launchFailure]);
+  await waitForReadyOrStopChild({
+    child,
+    waitForReady: () => Promise.race([waitForServer(url), launchFailure]),
+  });
 
   return {
     url,

@@ -9,6 +9,30 @@
     "node": "24.11.1",
     "pnpm": "11.0.8"
   },
+  "build": {
+    "appId": "local.language-learning",
+    "productName": "Language Learning Notes",
+    "asar": true,
+    "npmRebuild": false,
+    "files": [
+      "dist-electron/main.js",
+      "dist-electron/main.js.map",
+      "dist-electron/preload.js",
+      "dist-electron/preload.js.map",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-electron/server",
+        "to": "server"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dir"
+      ]
+    }
+  },
   "scripts": {
     "build": "next build --webpack",
     "dev": "next dev",
