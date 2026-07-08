@@ -66,6 +66,7 @@ test('createNextServerLaunchConfig_DevMode_UsesDocumentedNvmPnpmCommand', () => 
   assert.equal(config.env.HOSTNAME, '127.0.0.1');
   assert.equal(config.env.PORT, '53177');
   assert.equal(config.env.LOCAL_DATA_ROOT, '/data/root');
+  assert.equal(config.env.APP_SURFACE, 'desktop');
   assert.equal(config.env.ELECTRON_RUN_AS_NODE, undefined);
 });
 
@@ -103,5 +104,6 @@ test('createNextServerLaunchConfig_ProductionMode_UsesBundledServerEntry', () =>
   assert.equal(config.env.HOSTNAME, '127.0.0.1');
   assert.equal(config.env.PORT, '34400');
   assert.equal(config.env.LOCAL_DATA_ROOT, '/data/root');
+  assert.equal(config.env.APP_SURFACE, 'desktop');
   assert.equal(config.env.ELECTRON_RUN_AS_NODE, '1');
 });
