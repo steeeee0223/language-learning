@@ -95,3 +95,41 @@ pnpm build
 ```
 
 `pnpm build` uses `next build --webpack` because the current Fumadocs MDX setup builds reliably through webpack in this workspace.
+
+## Desktop MVP
+
+Run the Electron desktop shell in development:
+
+```bash
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+source "$NVM_DIR/nvm.sh"
+nvm use 24.11.1 --silent
+$NVM_BIN/pnpm electron:dev
+```
+
+The desktop shell starts the local Next.js server with `LOCAL_DATA_ROOT` set to Electron's app data directory unless a custom data folder is configured.
+
+Build an unsigned local macOS app bundle:
+
+```bash
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+source "$NVM_DIR/nvm.sh"
+nvm use 24.11.1 --silent
+$NVM_BIN/pnpm electron:dist
+open "dist/mac-arm64/Language Learning Notes.app"
+```
+
+The unpacked app directory is architecture-specific. On this Apple Silicon machine, the build output is `dist/mac-arm64/Language Learning Notes.app`.
+
+This MVP bundle is for trusted local machines. It is not signed, notarized, auto-updated, or prepared for public distribution.
+
+Manual desktop MVP checklist:
+
+1. `electron:dev` launches the app window.
+2. The default desktop data root creates and uses `.local`.
+3. A custom data folder can be selected and works after restart.
+4. Codex status displays correctly.
+5. Creating a YouTube story still works.
+6. Generating a lesson still writes output.
+7. Quitting the app stops the local server.
+8. A local macOS app bundle can be built and opened.

@@ -1,4 +1,6 @@
 import { parseGeneratedLesson } from '@/lib/lesson-content';
+import type { LessonAiProvider } from './ai-provider';
+import { createCodexAiProvider } from './codex-ai-provider';
 import {
   OpenAICodexLessonGenerator,
   type CodexLessonGenerator,
@@ -22,8 +24,10 @@ type GenerateLessonInput = {
 };
 
 type GenerateLessonDependencies = {
+  provider?: LessonAiProvider;
   generator?: CodexLessonGenerator;
   getStatus?: typeof getCodexStatus;
+  createProvider?: typeof createCodexAiProvider;
   timeoutMs?: number;
   updateGeneration?: typeof updateTaskGeneration;
 };
@@ -37,8 +41,8 @@ function throwIfGenerationAborted(signal: AbortSignal) {
 }
 
 async function generateUntilAbort(
-  generator: CodexLessonGenerator,
-  input: Parameters<CodexLessonGenerator['generate']>[0],
+  provider: Pick<LessonAiProvider, 'generate'>,
+  input: Parameters<LessonAiProvider['generate']>[0],
 ) {
   throwIfGenerationAborted(input.signal);
   let onAbort!: () => void;
@@ -49,10 +53,31 @@ async function generateUntilAbort(
   });
 
   try {
-    return await Promise.race([Promise.resolve().then(() => generator.generate(input)), aborted]);
+    return await Promise.race([Promise.resolve().then(() => provider.generate(input)), aborted]);
   } finally {
     input.signal.removeEventListener('abort', onAbort);
   }
+}
+
+function createLegacyProvider(
+  dependencies: Pick<GenerateLessonDependencies, 'generator' | 'getStatus'>,
+): LessonAiProvider {
+  let generator = dependencies.generator;
+
+  return {
+    id: 'codex',
+    getStatus: dependencies.getStatus ?? getCodexStatus,
+    generate(input) {
+      generator ??= new OpenAICodexLessonGenerator();
+      return generator.generate(input);
+    },
+  };
+}
+
+function resolveProvider(dependencies: GenerateLessonDependencies): LessonAiProvider {
+  if (dependencies.provider) return dependencies.provider;
+  if (dependencies.generator || dependencies.getStatus) return createLegacyProvider(dependencies);
+  return (dependencies.createProvider ?? createCodexAiProvider)();
 }
 
 export async function generateLesson(
@@ -78,6 +103,7 @@ export async function generateLesson(
   let generatedContent: string | undefined;
   let stage: GenerationStage = 'preflight';
   const updateGeneration = dependencies.updateGeneration ?? updateTaskGeneration;
+  const provider = resolveProvider(dependencies);
 
   try {
     task = await readTask(input.slug, dataRoot);
@@ -97,7 +123,7 @@ export async function generateLesson(
 
     requestedModel = resolveModelPreset(task.modelPreset);
     stage = 'status';
-    const status = await (dependencies.getStatus ?? getCodexStatus)();
+    const status = await provider.getStatus();
     if (status.status === 'not-installed') {
       throw new GenerationError('CODEX_NOT_INSTALLED', 'The local Codex runtime is unavailable.');
     }
@@ -121,13 +147,12 @@ export async function generateLesson(
     );
     pendingRecorded = true;
 
-    const generator = dependencies.generator ?? new OpenAICodexLessonGenerator();
     const timeoutSignal = AbortSignal.timeout(dependencies.timeoutMs ?? 180_000);
     const generationSignal = input.signal
       ? AbortSignal.any([input.signal, timeoutSignal])
       : timeoutSignal;
     stage = 'generation';
-    const content = await generateUntilAbort(generator, {
+    const content = await generateUntilAbort(provider, {
       prompt: buildLessonPrompt({ task, story }),
       model: requestedModel,
       signal: generationSignal,
