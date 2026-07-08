@@ -9,6 +9,7 @@ import { GenerationError } from '@/lib/server/generation-errors';
 import { buildLessonPrompt } from '@/lib/server/lesson-prompt';
 import { ensureLocalDirs } from '@/lib/server/local-paths';
 import { resolveModelPreset } from '@/lib/server/model-registry';
+import type { LessonAiProvider } from '@/lib/server/ai-provider';
 import { storySchema } from '@/lib/schemas/story-schema';
 import { readTask } from '@/lib/server/task-store';
 import { writeLessonOnce } from '@/lib/server/lesson-writer';
@@ -97,6 +98,57 @@ describe('lesson persistence and generation coordination', () => {
     );
 
     assert.equal(await readFile(join(rootDir, '.local/lessons/lesson.json'), 'utf8'), expected);
+  });
+
+  it('uses the default provider factory only when legacy seams are not supplied', async () => {
+    const validLesson = await readFile('tests/fixtures/valid-generated-lesson.json', 'utf8');
+    const defaultRun = await createStoredTaskFixture({ modelPreset: 'best' });
+    const defaultCalls: string[] = [];
+    const defaultProvider: LessonAiProvider = {
+      id: 'codex',
+      getStatus: async () => {
+        defaultCalls.push('status');
+        return getReadyStatus();
+      },
+      generate: async ({ model }) => {
+        defaultCalls.push(`generate:${model}`);
+        return validLesson;
+      },
+    };
+
+    await generateLesson(
+      { slug: 'lesson', rootDir: defaultRun.rootDir },
+      { createProvider: () => defaultProvider },
+    );
+
+    assert.deepEqual(defaultCalls, ['status', `generate:${resolveModelPreset('best')}`]);
+
+    const legacyRun = await createStoredTaskFixture({ modelPreset: 'fast' });
+    const legacyCalls: string[] = [];
+    let factoryCalls = 0;
+
+    await generateLesson(
+      { slug: 'lesson', rootDir: legacyRun.rootDir },
+      {
+        createProvider: () => {
+          factoryCalls += 1;
+          return defaultProvider;
+        },
+        generator: {
+          generate: async ({ model }) => {
+            legacyCalls.push(`generate:${model}`);
+            return validLesson;
+          },
+        },
+        getStatus: async () => {
+          legacyCalls.push('status');
+          return getReadyStatus();
+        },
+      },
+    );
+
+    assert.equal(factoryCalls, 0);
+    assert.deepEqual(legacyCalls, ['status', `generate:${resolveModelPreset('fast')}`]);
   });
 
   it('rejects invalid JSON without publishing a fallback lesson', async () => {
