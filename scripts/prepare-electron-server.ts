@@ -19,6 +19,7 @@ async function copyIfExists(from: string, to: string) {
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
 await cp('.next/standalone', outputDir, { recursive: true });
+await rm(join(outputDir, 'dist'), { recursive: true, force: true });
 await mkdir(join(outputDir, '.next'), { recursive: true });
 await cp('.next/static', join(outputDir, '.next', 'static'), { recursive: true });
 await copyIfExists('public', join(outputDir, 'public'));

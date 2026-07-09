@@ -28,7 +28,9 @@
       }
     ],
     "mac": {
+      "x64ArchFiles": "Contents/Resources/app.asar.unpacked/node_modules/{@esbuild/darwin-arm64/**,@img/sharp-darwin-arm64/**,@img/sharp-libvips-darwin-arm64/**,@next/swc-darwin-arm64/**,@openai/codex-darwin-arm64/**,esbuild/**}",
       "target": [
+        "dmg",
         "dir"
       ]
     }
@@ -39,6 +41,7 @@
     "electron:compile": "tsx scripts/build-electron.ts",
     "electron:dev": "tsx scripts/build-electron.ts && electron . --dev",
     "electron:build": "tsx scripts/build-electron.ts && next build --webpack && tsx scripts/prepare-electron-server.ts",
+    "electron:dist:mac": "tsx scripts/build-electron.ts && next build --webpack && tsx scripts/prepare-electron-server.ts && PATH=\"$NVM_BIN:$PATH\" electron-builder --mac dmg --universal",
     "electron:dist": "tsx scripts/build-electron.ts && next build --webpack && tsx scripts/prepare-electron-server.ts && electron-builder --mac dir",
     "start": "next start",
     "test": "node --import tsx --test tests/*.test.ts",
