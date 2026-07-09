@@ -1,0 +1,70 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    env:
+      RELEASE_ASSET_NAME: Language-Learning-Notes-mac-universal.dmg
+      PNPM_STORE_DIR: /Users/runner/.pnpm-store
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
+
+      - name: Setup pnpm
+        id: pnpm-setup
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.8
+          run_install: false
+
+      - name: Configure pnpm store
+        env:
+          NVM_BIN: ${{ steps.pnpm-setup.outputs.bin_dest }}
+        run: $NVM_BIN/pnpm config set store-dir "$PNPM_STORE_DIR"
+
+      - name: Install dependencies
+        env:
+          NVM_BIN: ${{ steps.pnpm-setup.outputs.bin_dest }}
+        run: $NVM_BIN/pnpm install --frozen-lockfile
+
+      - name: Build unsigned macOS Universal DMG
+        env:
+          NVM_BIN: ${{ steps.pnpm-setup.outputs.bin_dest }}
+        run: $NVM_BIN/pnpm run electron:dist:mac
+
+      - name: Normalize DMG filename
+        run: |
+          set -euo pipefail
+          dmg_path="$(find dist -maxdepth 1 -type f -name '*.dmg' ! -name "$RELEASE_ASSET_NAME" -print -quit)"
+          if [ -z "$dmg_path" ]; then
+            echo "No DMG found in dist/" >&2
+            exit 1
+          fi
+
+          cp "$dmg_path" "dist/$RELEASE_ASSET_NAME"
+
+      - name: Create or update GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "dist/$RELEASE_ASSET_NAME" --clobber
+          else
+            gh release create "$TAG_NAME" "dist/$RELEASE_ASSET_NAME" --verify-tag --generate-notes
+          fi
