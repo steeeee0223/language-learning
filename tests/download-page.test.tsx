@@ -6,6 +6,7 @@ import { Check } from 'lucide-react';
 
 import { metadata } from '@/app/download/page';
 import {
+  AppleLogo,
   DownloadClient,
   DownloadOptionMenuItems,
   resolveDownloadClientState,
@@ -21,6 +22,14 @@ function getMetaCellChildren(menuItem: ReactElement<any>) {
 
   assert.ok(isValidElement(metaCell));
   return getElementChildren((metaCell as ReactElement<any>).props.children);
+}
+
+function getPlatformCellChildren(menuItem: ReactElement<any>) {
+  const menuItemChildren = Children.toArray(menuItem.props.children);
+  const platformCell = menuItemChildren[0];
+
+  assert.ok(isValidElement(platformCell));
+  return getElementChildren((platformCell as ReactElement<any>).props.children);
 }
 
 test('DownloadClient_RendersSelectedDownloadAndMvpNotice', () => {
@@ -93,9 +102,11 @@ test('DownloadOptionMenuItems_RendersDisabledItemsAndSelectedMarker', () => {
 
   const selectedMetaChildren = getMetaCellChildren(menuItemElements[0]!);
   const unselectedMetaChildren = getMetaCellChildren(menuItemElements[1]!);
+  const macPlatformChildren = getPlatformCellChildren(menuItemElements[0]!);
 
   assert.ok(selectedMetaChildren.some((child) => child.type === Check));
   assert.ok(unselectedMetaChildren.every((child) => child.type !== Check));
+  assert.ok(macPlatformChildren.some((child) => child.type === AppleLogo));
 });
 
 test('resolveDownloadClientState_FallsBackToFirstOptionWhenNothingEnabled', () => {

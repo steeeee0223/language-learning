@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Apple, Check, ChevronDown, Download, MonitorDown } from 'lucide-react';
+import { Check, ChevronDown, Download, MonitorDown } from 'lucide-react';
 
 import {
   DropdownMenu,
@@ -24,6 +24,23 @@ type DownloadOptionMenuItemsProps = {
   options: ResolvedDownloadOption[];
   onSelect: (id: string) => void;
 };
+
+export function AppleLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 814 1000"
+      className={className}
+      aria-hidden
+      focusable="false"
+      role="img"
+    >
+      <path
+        fill="currentColor"
+        d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 137.7 200.7 141.9 202.1-.6 3.2-21.9 75.1-72.5 149.4-43.5 63.5-88.5 127-159.4 127-69.7 0-87.7-41.3-163.7-41.3-76 0-99.5 40-165.7 42.6-67.1 2.6-118.2-68.6-162-132C10.2 750.5-55.4 515.6 35.3 356.9c45-78.1 125.6-127.6 213-128.9 66.5-1.3 129.3 44.8 169.8 44.8 40.5 0 116.5-55.4 196.4-47.3 33.4 1.4 127.2 13.5 187.5 101.4-4.9 3-112.3 65.5-111.2 195.5zM560.5 137.9C597.8 92.7 622.9 29.8 616.1 0c-53.7 2.1-118.7 35.8-156.9 81-34.3 39.8-64.3 103.9-56.2 165.1 59.8 4.6 120.9-30.4 157.5-108.2"
+      />
+    </svg>
+  );
+}
 
 export function resolveDownloadClientState(options: DownloadOption[], selectedId?: string) {
   const firstEnabledOption = options.find((option) => option.enabled) ?? options[0];
@@ -56,7 +73,7 @@ export function DownloadOptionMenuItems({
         >
           <span className="flex items-center gap-3">
             {option.platform === 'mac' ? (
-              <Apple className="size-5 fill-current" aria-hidden />
+              <AppleLogo className="size-5" />
             ) : (
               <MonitorDown className="size-5" aria-hidden />
             )}
@@ -97,7 +114,7 @@ export function DownloadClient({ options }: DownloadClientProps) {
         <div className="mt-12 flex flex-col items-center gap-4">
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex h-14 items-center justify-center gap-2 rounded-full border-2 border-zinc-200 bg-white px-7 text-lg font-medium shadow-sm hover:bg-zinc-50">
-              <Apple className="size-6 fill-current" aria-hidden />
+              <AppleLogo className="size-6" />
               <span>{selectedOption?.label ?? 'macOS Universal'}</span>
               <ChevronDown className="size-5" aria-hidden />
             </DropdownMenuTrigger>
