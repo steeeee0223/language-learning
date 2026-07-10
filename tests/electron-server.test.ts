@@ -125,8 +125,22 @@ test('packageBuildConfig_AfterPackHookCopiesStandaloneServerDependencies', async
   assert.equal(packageJson.build?.afterPack, 'scripts/after-pack-electron.mjs');
 });
 
+test('packageBuildConfig_UniversalBuild_CoversServerNativeDependencies', async () => {
+  const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+    build?: { mac?: { x64ArchFiles?: string } };
+  };
+
+  assert.equal(
+    packageJson.build?.mac?.x64ArchFiles,
+    'Contents/Resources/{server/node_modules/.pnpm,app.asar.unpacked/node_modules}/**/{*darwin-arm64*/**,esbuild}',
+  );
+});
+
 test('afterPackHook_LocatesMainAppUnpackedDependenciesForCleanup', async () => {
-  const { packagedMainNodeModulesPath } = (await import('../scripts/after-pack-electron.mjs')) as {
+  const { isUniversalTempAppOutDir, packagedMainNodeModulesPath } = (await import(
+    '../scripts/after-pack-electron.mjs'
+  )) as {
+    isUniversalTempAppOutDir(appOutDir: string): boolean;
     packagedMainNodeModulesPath(context: {
       appOutDir: string;
       packager: { appInfo: { productFilename: string } };
@@ -140,4 +154,8 @@ test('afterPackHook_LocatesMainAppUnpackedDependenciesForCleanup', async () => {
     }),
     '/dist/mac-arm64/Language Learning Notes.app/Contents/Resources/app.asar.unpacked/node_modules',
   );
+  assert.equal(isUniversalTempAppOutDir('/dist/mac-universal-x64-temp'), true);
+  assert.equal(isUniversalTempAppOutDir('/dist/mac-universal-arm64-temp'), true);
+  assert.equal(isUniversalTempAppOutDir('/dist/mac-universal'), false);
+  assert.equal(isUniversalTempAppOutDir('/dist/mac-arm64'), false);
 });

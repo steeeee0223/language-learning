@@ -29,7 +29,7 @@
       }
     ],
     "mac": {
-      "x64ArchFiles": "Contents/Resources/app.asar.unpacked/node_modules/{@esbuild/darwin-arm64/**,@img/sharp-darwin-arm64/**,@img/sharp-libvips-darwin-arm64/**,@next/swc-darwin-arm64/**,@openai/codex-darwin-arm64/**,esbuild/**}",
+      "x64ArchFiles": "Contents/Resources/{server/node_modules/.pnpm,app.asar.unpacked/node_modules}/**/{*darwin-arm64*/**,esbuild}",
       "target": [
         "dmg",
         "dir"

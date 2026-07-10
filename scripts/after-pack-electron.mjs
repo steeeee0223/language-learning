@@ -13,6 +13,10 @@ export function packagedMainNodeModulesPath(context) {
   );
 }
 
+export function isUniversalTempAppOutDir(appOutDir) {
+  return /-(?:x64|arm64)-temp$/.test(appOutDir);
+}
+
 export default async function afterPack(context) {
   if (context.electronPlatformName !== 'darwin') {
     return;
@@ -32,5 +36,7 @@ export default async function afterPack(context) {
     recursive: true,
     verbatimSymlinks: true,
   });
-  await rm(packagedMainNodeModulesPath(context), { recursive: true, force: true });
+  if (!isUniversalTempAppOutDir(context.appOutDir)) {
+    await rm(packagedMainNodeModulesPath(context), { recursive: true, force: true });
+  }
 }
