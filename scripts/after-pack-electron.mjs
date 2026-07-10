@@ -1,6 +1,18 @@
 import { cp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
+export function packagedMainNodeModulesPath(context) {
+  const productFilename = context.packager.appInfo.productFilename;
+  return join(
+    context.appOutDir,
+    `${productFilename}.app`,
+    'Contents',
+    'Resources',
+    'app.asar.unpacked',
+    'node_modules',
+  );
+}
+
 export default async function afterPack(context) {
   if (context.electronPlatformName !== 'darwin') {
     return;
@@ -20,4 +32,5 @@ export default async function afterPack(context) {
     recursive: true,
     verbatimSymlinks: true,
   });
+  await rm(packagedMainNodeModulesPath(context), { recursive: true, force: true });
 }

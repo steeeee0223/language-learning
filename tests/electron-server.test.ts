@@ -124,3 +124,20 @@ test('packageBuildConfig_AfterPackHookCopiesStandaloneServerDependencies', async
   assert.ok(serverResource, 'expected packaged app to include the standalone server');
   assert.equal(packageJson.build?.afterPack, 'scripts/after-pack-electron.mjs');
 });
+
+test('afterPackHook_LocatesMainAppUnpackedDependenciesForCleanup', async () => {
+  const { packagedMainNodeModulesPath } = (await import('../scripts/after-pack-electron.mjs')) as {
+    packagedMainNodeModulesPath(context: {
+      appOutDir: string;
+      packager: { appInfo: { productFilename: string } };
+    }): string;
+  };
+
+  assert.equal(
+    packagedMainNodeModulesPath({
+      appOutDir: '/dist/mac-arm64',
+      packager: { appInfo: { productFilename: 'Language Learning Notes' } },
+    }),
+    '/dist/mac-arm64/Language Learning Notes.app/Contents/Resources/app.asar.unpacked/node_modules',
+  );
+});
