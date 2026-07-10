@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Language Learning Notes">
+  <rect width="512" height="512" fill="#ffffff"/>
+  <rect x="181" y="151" width="172" height="172" rx="27" fill="#18181b"/>
+  <rect x="160" y="128" width="172" height="172" rx="27" fill="#ffffff" stroke="#18181b" stroke-width="7"/>
+  <path d="M228 187h24v68h44v24h-68z" fill="#09090b"/>
+</svg>
