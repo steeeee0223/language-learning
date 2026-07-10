@@ -14,6 +14,7 @@
     "productName": "Language Learning Notes",
     "asar": true,
     "npmRebuild": false,
+    "afterPack": "scripts/after-pack-electron.mjs",
     "files": [
       "dist-electron/main.js",
       "dist-electron/main.js.map",

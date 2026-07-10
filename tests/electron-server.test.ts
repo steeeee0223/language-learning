@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 
@@ -106,4 +107,20 @@ test('createNextServerLaunchConfig_ProductionMode_UsesBundledServerEntry', () =>
   assert.equal(config.env.LOCAL_DATA_ROOT, '/data/root');
   assert.equal(config.env.APP_SURFACE, 'desktop');
   assert.equal(config.env.ELECTRON_RUN_AS_NODE, '1');
+});
+
+test('packageBuildConfig_AfterPackHookCopiesStandaloneServerDependencies', async () => {
+  const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+    build?: {
+      afterPack?: string;
+      extraResources?: Array<{ from?: string; to?: string }>;
+    };
+  };
+
+  const serverResource = packageJson.build?.extraResources?.find(
+    (resource) => resource.from === 'dist-electron/server' && resource.to === 'server',
+  );
+
+  assert.ok(serverResource, 'expected packaged app to include the standalone server');
+  assert.equal(packageJson.build?.afterPack, 'scripts/after-pack-electron.mjs');
 });
