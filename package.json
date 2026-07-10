@@ -14,6 +14,7 @@
     "productName": "Language Learning Notes",
     "asar": true,
     "npmRebuild": false,
+    "afterPack": "scripts/after-pack-electron.mjs",
     "files": [
       "dist-electron/main.js",
       "dist-electron/main.js.map",
@@ -28,7 +29,9 @@
       }
     ],
     "mac": {
+      "x64ArchFiles": "Contents/Resources/{server/node_modules/.pnpm,app.asar.unpacked/node_modules}/**/{*darwin-arm64*/**,esbuild}",
       "target": [
+        "dmg",
         "dir"
       ]
     }
@@ -39,7 +42,8 @@
     "electron:compile": "tsx scripts/build-electron.ts",
     "electron:dev": "tsx scripts/build-electron.ts && electron . --dev",
     "electron:build": "tsx scripts/build-electron.ts && next build --webpack && tsx scripts/prepare-electron-server.ts",
-    "electron:dist": "tsx scripts/build-electron.ts && next build --webpack && tsx scripts/prepare-electron-server.ts && electron-builder --mac dir",
+    "electron:dist:mac": "pnpm electron:build && PATH=\"$NVM_BIN:$PATH\" electron-builder --mac dmg --universal --publish never",
+    "electron:dist": "pnpm electron:build && electron-builder --mac dir --publish never",
     "start": "next start",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "fumadocs-mdx && next typegen && tsc --noEmit",

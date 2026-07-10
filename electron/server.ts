@@ -126,6 +126,7 @@ export function createNextServerLaunchConfig(
     HOSTNAME: '127.0.0.1',
     PORT: String(input.port),
     LOCAL_DATA_ROOT: input.dataRoot,
+    APP_SURFACE: 'desktop',
     ...(input.dev ? {} : { ELECTRON_RUN_AS_NODE: '1' }),
   };
 

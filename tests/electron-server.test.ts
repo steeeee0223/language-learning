@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 
@@ -66,6 +67,7 @@ test('createNextServerLaunchConfig_DevMode_UsesDocumentedNvmPnpmCommand', () => 
   assert.equal(config.env.HOSTNAME, '127.0.0.1');
   assert.equal(config.env.PORT, '53177');
   assert.equal(config.env.LOCAL_DATA_ROOT, '/data/root');
+  assert.equal(config.env.APP_SURFACE, 'desktop');
   assert.equal(config.env.ELECTRON_RUN_AS_NODE, undefined);
 });
 
@@ -103,5 +105,57 @@ test('createNextServerLaunchConfig_ProductionMode_UsesBundledServerEntry', () =>
   assert.equal(config.env.HOSTNAME, '127.0.0.1');
   assert.equal(config.env.PORT, '34400');
   assert.equal(config.env.LOCAL_DATA_ROOT, '/data/root');
+  assert.equal(config.env.APP_SURFACE, 'desktop');
   assert.equal(config.env.ELECTRON_RUN_AS_NODE, '1');
+});
+
+test('packageBuildConfig_AfterPackHookCopiesStandaloneServerDependencies', async () => {
+  const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+    build?: {
+      afterPack?: string;
+      extraResources?: Array<{ from?: string; to?: string }>;
+    };
+  };
+
+  const serverResource = packageJson.build?.extraResources?.find(
+    (resource) => resource.from === 'dist-electron/server' && resource.to === 'server',
+  );
+
+  assert.ok(serverResource, 'expected packaged app to include the standalone server');
+  assert.equal(packageJson.build?.afterPack, 'scripts/after-pack-electron.mjs');
+});
+
+test('packageBuildConfig_UniversalBuild_CoversServerNativeDependencies', async () => {
+  const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+    build?: { mac?: { x64ArchFiles?: string } };
+  };
+
+  assert.equal(
+    packageJson.build?.mac?.x64ArchFiles,
+    'Contents/Resources/{server/node_modules/.pnpm,app.asar.unpacked/node_modules}/**/{*darwin-arm64*/**,esbuild}',
+  );
+});
+
+test('afterPackHook_LocatesMainAppUnpackedDependenciesForCleanup', async () => {
+  const { isUniversalTempAppOutDir, packagedMainNodeModulesPath } = (await import(
+    '../scripts/after-pack-electron.mjs'
+  )) as {
+    isUniversalTempAppOutDir(appOutDir: string): boolean;
+    packagedMainNodeModulesPath(context: {
+      appOutDir: string;
+      packager: { appInfo: { productFilename: string } };
+    }): string;
+  };
+
+  assert.equal(
+    packagedMainNodeModulesPath({
+      appOutDir: '/dist/mac-arm64',
+      packager: { appInfo: { productFilename: 'Language Learning Notes' } },
+    }),
+    '/dist/mac-arm64/Language Learning Notes.app/Contents/Resources/app.asar.unpacked/node_modules',
+  );
+  assert.equal(isUniversalTempAppOutDir('/dist/mac-universal-x64-temp'), true);
+  assert.equal(isUniversalTempAppOutDir('/dist/mac-universal-arm64-temp'), true);
+  assert.equal(isUniversalTempAppOutDir('/dist/mac-universal'), false);
+  assert.equal(isUniversalTempAppOutDir('/dist/mac-arm64'), false);
 });
